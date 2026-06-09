@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 | :--- | :--- |
 | 세션 작업일 | 2026-06-09 |
-| 작업 브랜치 | `task/브랜치승급기록_codex` |
+| 작업 브랜치 | `task/브랜치승급기록_codex`, `task/브랜치승급결과기록_codex` |
 | 작업 에이전트 | Codex |
 | 작성자 | jkoogi |
 | GitHub 이슈 | [#6 dev to stg, stg to main 브랜치 승급](https://github.com/jkoogit/PDFowers/issues/6) |
@@ -38,12 +38,13 @@ MVP1 인증 보완점 및 하네스 개발 준비 문서 정리 작업이 PR #5�
 
 | 항목 | 결과 |
 | :--- | :--- |
-| 승급 기록 PR | 처리 후 기입 |
-| `dev -> stg` PR | 처리 후 기입 |
-| `stg -> main` PR | 처리 후 기입 |
-| 최종 `dev` 커밋 | 처리 후 기입 |
-| 최종 `stg` 커밋 | 처리 후 기입 |
-| 최종 `main` 커밋 | 처리 후 기입 |
+| 승급 기록 PR | [#7 브랜치 승급 세션 기록 추가](https://github.com/jkoogit/PDFowers/pull/7) |
+| `dev -> stg` PR | [#8 dev to stg 브랜치 승급](https://github.com/jkoogit/PDFowers/pull/8) |
+| `stg -> main` PR | [#9 stg to main 브랜치 승급](https://github.com/jkoogit/PDFowers/pull/9) |
+| 1차 승급 후 `dev` 커밋 | `2ad6c7b` |
+| 1차 승급 후 `stg` 커밋 | `45b4df9` |
+| 1차 승급 후 `main` 커밋 | `d86094b` |
+| 비고 | 이 문서는 1차 승급 결과를 사후 보완 기록하기 위한 후속 커밋으로 추가 반영한다. 최종 브랜치 커밋은 이슈 #6 코멘트와 세션 최종 응답에 기록한다. |
 
 ## 6. 검증 기준
 
@@ -64,3 +65,4 @@ MVP1 인증 보완점 및 하네스 개발 준비 문서 정리 작업이 PR #5�
 | 작업일시 | 작업 에이전트 | 작성자 | 내용 한 줄 요약 |
 | :--- | :--- | :--- | :--- |
 | 2026-06-09 23:50 KST | Codex | jkoogi | dev-stg-main 브랜치 승급 세션 기록 문서 작성 |
+| 2026-06-09 23:56 KST | Codex | jkoogi | PR #7, #8, #9 승급 결과와 1차 승급 후 커밋 기록 |
