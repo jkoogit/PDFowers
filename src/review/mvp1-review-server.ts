@@ -11,6 +11,16 @@ import {
 
 type ReviewRequestHandler = (request: Request) => Promise<Response>;
 
+export interface ReviewPersistence {
+  initialize(state: ReviewState): Promise<ReviewState>;
+  persist(state: ReviewState): Promise<ReviewState>;
+  summarize(state: ReviewState): Promise<ReviewState>;
+}
+
+interface ReviewHandlerOptions {
+  persistence?: ReviewPersistence;
+}
+
 const DEFAULT_PORT = 4173;
 const compiledPublicDir = fileURLToPath(new URL("./public", import.meta.url));
 const sourcePublicDir = join(process.cwd(), "src", "review", "public");
@@ -23,18 +33,33 @@ const MIME_TYPES: Record<string, string> = {
   ".js": "application/javascript; charset=utf-8"
 };
 
-export function createReviewRequestHandler(initialState = createInitialReviewState()): ReviewRequestHandler {
+export function createReviewRequestHandler(
+  initialState = createInitialReviewState(),
+  options: ReviewHandlerOptions = {}
+): ReviewRequestHandler {
   let state: ReviewState = initialState;
+  let initialized = false;
+
+  async function ensureInitialized() {
+    if (!initialized) {
+      initialized = true;
+      state = options.persistence ? await options.persistence.initialize(state) : state;
+    }
+  }
 
   return async (request: Request) => {
+    await ensureInitialized();
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/api/review/state") {
+      state = options.persistence ? await options.persistence.summarize(state) : state;
       return jsonResponse(state);
     }
 
     if (request.method === "POST" && url.pathname === "/api/review/reset") {
       state = createInitialReviewState();
+      initialized = false;
+      await ensureInitialized();
       return jsonResponse({ ok: true, state });
     }
 
@@ -42,8 +67,8 @@ export function createReviewRequestHandler(initialState = createInitialReviewSta
       const scenarioId = url.pathname.split("/").at(-1) as ReviewScenarioId;
       try {
         const result = runReviewScenario(state, scenarioId);
-        state = result.state;
-        return jsonResponse(result);
+        state = options.persistence ? await options.persistence.persist(result.state) : result.state;
+        return jsonResponse({ ...result, state });
       } catch (error) {
         return jsonResponse(
           {
@@ -65,8 +90,11 @@ export function createReviewRequestHandler(initialState = createInitialReviewSta
   };
 }
 
-export function startMvp1ReviewServer(port = Number(process.env.PORT ?? DEFAULT_PORT)) {
-  const handler = createReviewRequestHandler();
+export function startMvp1ReviewServer(
+  port = Number(process.env.PORT ?? DEFAULT_PORT),
+  options: ReviewHandlerOptions = {}
+) {
+  const handler = createReviewRequestHandler(createInitialReviewState(), options);
   const server = createServer((request, response) => {
     void handleNodeRequest(handler, request, response);
   });

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   approveMergeRequest,
   cancelMergeRequest,
@@ -39,11 +40,22 @@ export interface ReviewTestCase {
 }
 
 export interface ReviewState {
+  runId: string;
   users: AuthUser[];
   currentUserUuid?: string;
   mergeRequests: AccountMergeRequest[];
   testCases: ReviewTestCase[];
   messages: string[];
+  database?: {
+    mode: "memory" | "database";
+    connected: boolean;
+    userRows: number;
+    identityRows: number;
+    mergeRequestRows: number;
+    auditLogRows: number;
+    error?: string;
+    lastPersistedAt?: string;
+  };
 }
 
 export interface ReviewScenarioResult {
@@ -66,6 +78,7 @@ export function listReviewTestCases(): ReviewTestCase[] {
 
 export function createInitialReviewState(): ReviewState {
   return {
+    runId: `review-${randomUUID().slice(0, 8)}`,
     users: [],
     mergeRequests: [],
     testCases: listReviewTestCases(),
@@ -86,6 +99,7 @@ export function runReviewScenario(
 
 function cloneReviewState(state: ReviewState): ReviewState {
   return {
+    runId: state.runId,
     users: [...state.users],
     currentUserUuid: state.currentUserUuid,
     mergeRequests: [...state.mergeRequests],
@@ -109,8 +123,8 @@ function ensureLocalUser(state: ReviewState): AuthUser {
   }
 
   const user = createLocalUser({
-    loginId: "review-user",
-    email: "review-user@example.test",
+    loginId: `${state.runId}-local`,
+    email: `${state.runId}-local@example.test`,
     password: "correct-password",
     displayName: "검수 사용자",
     emailVerifiedAt: new Date("2026-06-11T00:00:00.000Z")
@@ -121,10 +135,14 @@ function ensureLocalUser(state: ReviewState): AuthUser {
   return user;
 }
 
-function ensureProviderUser(provider: AuthProvider, providerUserId: string): AuthUser {
+function ensureProviderUser(
+  state: ReviewState,
+  provider: AuthProvider,
+  providerUserId: string
+): AuthUser {
   return createOAuthUser({
-    loginId: `${provider}-owner`,
-    email: `${provider}-owner@example.test`,
+    loginId: `${state.runId}-${provider}-owner`,
+    email: `${state.runId}-${provider}-owner@example.test`,
     password: "correct-password",
     displayName: `${provider} 보유 계정`,
     provider,
@@ -147,8 +165,8 @@ const scenarioHandlers: Record<ReviewScenarioId, (state: ReviewState) => string>
   },
   "local-login-email-required": (state) => {
     const user = createLocalUser({
-      loginId: "unverified-user",
-      email: "unverified@example.test",
+      loginId: `${state.runId}-unverified`,
+      email: `${state.runId}-unverified@example.test`,
       password: "correct-password",
       displayName: "미인증 사용자"
     });
@@ -158,16 +176,16 @@ const scenarioHandlers: Record<ReviewScenarioId, (state: ReviewState) => string>
     return "이메일 인증 필수/선택 정책을 확인했습니다.";
   },
   "oauth-signup": (state) => {
-    const user = ensureProviderUser("kakao", "review-kakao-user");
+    const user = ensureProviderUser(state, "kakao", `${state.runId}-kakao-user`);
     state.users.push(user);
     state.currentUserUuid = user.userUuid;
     pass(state, "MVP1-AUTH-T006");
     return "신규 OAuth 회원가입을 확인했습니다.";
   },
   "oauth-login": (state) => {
-    const user = ensureProviderUser("google", "review-google-user");
+    const user = ensureProviderUser(state, "google", `${state.runId}-google-user`);
     state.users.push(user);
-    findOAuthLogin(state.users, "google", "review-google-user");
+    findOAuthLogin(state.users, "google", `${state.runId}-google-user`);
     state.currentUserUuid = user.userUuid;
     pass(state, "MVP1-AUTH-T007", "MVP1-AUTH-T016", "MVP1-AUTH-T020");
     return "기존 OAuth 로그인과 민감정보 비노출을 확인했습니다.";
@@ -178,20 +196,20 @@ const scenarioHandlers: Record<ReviewScenarioId, (state: ReviewState) => string>
       currentUser: user,
       allUsers: state.users,
       provider: "naver",
-      providerUserId: "review-naver-user"
+      providerUserId: `${state.runId}-naver-user`
     });
     pass(state, "MVP1-AUTH-T009", "MVP1-AUTH-T010");
     return "로그인 상태 OAuth 연결과 중복 연결 차단을 확인했습니다.";
   },
   "oauth-link-conflict": (state) => {
     const requester = ensureLocalUser(state);
-    const target = ensureProviderUser("kakao", "conflict-kakao-user");
+    const target = ensureProviderUser(state, "kakao", `${state.runId}-conflict-kakao-user`);
     state.users.push(target);
     const result = linkOAuthIdentity({
       currentUser: requester,
       allUsers: state.users,
       provider: "kakao",
-      providerUserId: "conflict-kakao-user"
+      providerUserId: `${state.runId}-conflict-kakao-user`
     });
     if (result.mergeRequest) {
       state.mergeRequests.push(result.mergeRequest);
@@ -221,13 +239,13 @@ const scenarioHandlers: Record<ReviewScenarioId, (state: ReviewState) => string>
   },
   "merge-expire": (state) => {
     const requester = ensureLocalUser(state);
-    const target = ensureProviderUser("google", "expire-google-user");
+    const target = ensureProviderUser(state, "google", `${state.runId}-expire-google-user`);
     state.users.push(target);
     const result = linkOAuthIdentity({
       currentUser: requester,
       allUsers: state.users,
       provider: "google",
-      providerUserId: "expire-google-user",
+      providerUserId: `${state.runId}-expire-google-user`,
       now: new Date("2026-06-11T00:00:00.000Z"),
       expiresInMs: 1
     });
@@ -249,7 +267,7 @@ const scenarioHandlers: Record<ReviewScenarioId, (state: ReviewState) => string>
       currentUser: user,
       allUsers: state.users,
       provider: "google",
-      providerUserId: "unlink-google-user"
+      providerUserId: `${state.runId}-unlink-google-user`
     });
     unlinkOAuthIdentity({ user, provider: "google" });
     unlinkLocalCredential(user);
@@ -268,7 +286,7 @@ const scenarioHandlers: Record<ReviewScenarioId, (state: ReviewState) => string>
   },
   "email-change-confirm": (state) => {
     const user = ensureLocalUser(state);
-    requestEmailChange(user, "changed-review-user@example.test");
+    requestEmailChange(user, `${state.runId}-changed@example.test`);
     confirmEmailChange(user, new Date("2026-06-11T01:00:00.000Z"));
     pass(state, "MVP1-AUTH-T019");
     return "이메일 변경과 재인증 반영을 확인했습니다.";

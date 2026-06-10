@@ -8,6 +8,10 @@ const elements = {
   metricIdentities: document.querySelector("#metric-identities"),
   metricMerges: document.querySelector("#metric-merges"),
   metricPassed: document.querySelector("#metric-passed"),
+  metricDbMode: document.querySelector("#metric-db-mode"),
+  metricDbUsers: document.querySelector("#metric-db-users"),
+  metricDbIdentities: document.querySelector("#metric-db-identities"),
+  metricDbAudit: document.querySelector("#metric-db-audit"),
   messageList: document.querySelector("#message-list"),
   auditList: document.querySelector("#audit-list"),
   accountList: document.querySelector("#account-list"),
@@ -92,6 +96,10 @@ function renderState(reviewState) {
   setText(elements.metricIdentities, String(identityCount));
   setText(elements.metricMerges, String(mergeRequests.length));
   setText(elements.metricPassed, String(passedCount));
+  setText(elements.metricDbMode, reviewState.database?.connected ? "DB" : "메모리");
+  setText(elements.metricDbUsers, String(reviewState.database?.userRows ?? 0));
+  setText(elements.metricDbIdentities, String(reviewState.database?.identityRows ?? 0));
+  setText(elements.metricDbAudit, String(reviewState.database?.auditLogRows ?? 0));
 
   renderMessages(reviewState.messages ?? []);
   renderAuditLogs(auditLogs);
