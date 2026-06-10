@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { AUTH_ERRORS } from "../src/domains/auth/auth-errors.js";
+import { AUTH_ERRORS } from "../../src/domains/auth/auth-errors.js";
 import {
   approveMergeRequest,
   cancelMergeRequest,
@@ -14,7 +14,7 @@ import {
   unlinkOAuthIdentity,
   verifyLocalLogin,
   type AuthUser
-} from "../src/domains/auth/auth-domain.js";
+} from "../../src/domains/auth/auth-domain.js";
 
 function localUser(overrides: Partial<Parameters<typeof createLocalUser>[0]> = {}) {
   return createLocalUser({
