@@ -12,9 +12,9 @@
 
 ## 1. 현재 구조 확인
 
-2026-06-10 기준 저장소 루트에는 `docs/`와 `AGENTS.md`만 존재한다. 앱 런타임 파일, 패키지 매니저 설정, 서버/클라이언트 소스, 하네스 생성 산출물은 아직 없다.
+2026-06-10 초기 기준 저장소 루트에는 `docs/`와 `AGENTS.md`만 존재했다. 이후 인증 도메인 개발환경 정식화 작업에서 `package.json`, `package-lock.json`, TypeScript/Vitest 설정, 인증 도메인 순수 함수와 테스트가 추가되었다.
 
-따라서 이번 설계는 실제 생성 코드 분석 결과가 아니라, 기존 문서에 정리된 하네스 전환 기준과 MVP1 인증 요구사항을 구현 가능한 초기 구조로 고정하는 문서다. 하네스가 별도 생성물을 제공하면 이 설계의 도메인 경계와 ADR 선택을 기준으로 차이를 비교한다.
+현재 구현된 소스는 HTTP, DB, OAuth 네트워크 어댑터를 포함하지 않는다. 인증 정책은 `src/domains/auth` 아래 TypeScript 순수 함수로 먼저 고정했고, 외부 의존성이 필요한 계층은 후속 PR에서 붙인다. 하네스가 별도 생성물을 제공하면 이 설계의 도메인 경계와 ADR 선택을 기준으로 차이를 비교한다.
 
 ## 2. 구현 범위
 
@@ -43,27 +43,29 @@ MVP1은 인증, 간편로그인, 로그인 수단 연결, 승인 기반 계정 �
 
 ```text
 src/
+  domains/
+    auth/
+      auth-domain.ts
+      auth-errors.ts
+  db/
+    schema/
+      auth.ts
+      job.ts
+      index.ts
+    migrations/
+    client.ts
   app/
     http/
     config/
-  domains/
-    auth/
-      model/
-      usecase/
-      port/
-      adapter/
-      api/
-      test/
   shared/
     errors/
     validation/
     crypto/
-  infrastructure/
-    db/
-    job/
+test/
+  auth-domain.test.ts
 ```
 
-의존성 방향은 `model -> usecase -> port`를 중심으로 고정한다. `api`와 `adapter`는 도메인 유스케이스를 호출하는 외부 계층이며, 도메인 규칙을 직접 구현하지 않는다.
+현재 구현은 `src/domains/auth/auth-domain.ts`에 순수 도메인 규칙을 모아 두었다. 다음 단계에서 코드가 커지면 `model`, `usecase`, `port`, `adapter`, `api`로 분리하되, 의존성 방향은 도메인 규칙에서 외부 어댑터로 나가지 않게 유지한다. `api`와 `adapter`는 도메인 유스케이스를 호출하는 외부 계층이며, 도메인 규칙을 직접 구현하지 않는다.
 
 ## 4. API 결정
 
@@ -102,6 +104,8 @@ DB는 PostgreSQL, ORM은 Drizzle ORM을 1차 선택으로 둔다. Drizzle은 SQL
 - `audit_log`
 - `job`
 
+Drizzle 설치, `drizzle.config.ts`, PostgreSQL 드라이버, 최초 migration SQL 생성은 TypeScript/Vitest 정식화 PR과 분리한다. 이번 세션에서는 `docs/03_설계관리/데이터관리/01_MVP1_DB모델초안.md`에 파일 구조와 테이블 초안을 기록하고, 실제 스키마 코드는 다음 PR에서 작성한다.
+
 ## 7. 비동기 처리 결정
 
 계정 통합의 핵심 데이터 변경은 동기 트랜잭션으로 처리한다. 통합 완료 알림, 감사 로그 확장, 재색인, 대량 문서 소유권 이전은 DB Job Table로 분리한다.
@@ -118,15 +122,22 @@ MVP1에서는 외부 MQ를 도입하지 않는다. PDF 처리처럼 장시간 �
 | 통합 테스트 | 회원가입, 로그인, OAuth 식별자 연결, 계정 통합 승인 |
 | E2E 테스트 | UI 생성 후 가입/로그인 핵심 3~5개 흐름 |
 
-초기 스캐폴딩 단계에서는 외부 의존성 없이 Node.js 기본 테스트 러너로 도메인 규칙을 검증할 수 있게 시작한다. 패키지 설치가 가능해지면 Vitest, Drizzle, OpenAPI 도구를 붙인다.
+초기 스캐폴딩 단계에서는 외부 의존성 없이 Node.js 기본 테스트 러너로 도메인 규칙을 검증할 수 있게 시작했다. 2026-06-10 개발환경 정식화 작업에서 TypeScript와 Vitest를 도입했고, `MVP1-AUTH-T001`부터 `MVP1-AUTH-T020`까지 자동화 테스트로 표시했다.
+
+현재 표준 검증 명령은 다음과 같다.
+
+```text
+npm test
+npm run typecheck
+```
 
 ## 9. 성공 기준
 
-- 앱 생성물이 없는 현재 상태가 문서에 기록된다.
+- 인증 도메인 TypeScript 순수 함수와 Vitest 테스트가 저장소에 존재한다.
 - API, 인증, ORM, 비동기 처리 ADR이 승인 상태로 정리된다.
 - `docs/04_기술관리/06_개발명령어.md`에 현재 실행 가능한 명령과 향후 명령이 분리된다.
 - MVP1 인증 구현 계획이 테스트 우선 순서로 작성된다.
-- 최소 스캐폴딩은 외부 네트워크 없이 실행 가능한 테스트부터 시작한다.
+- 최소 스캐폴딩은 외부 네트워크 없이 실행 가능한 테스트부터 시작하고, `npm test`, `npm run typecheck`를 통과한다.
 
 ## 10. 자체 검토
 
@@ -134,3 +145,10 @@ MVP1에서는 외부 MQ를 도입하지 않는다. PDF 처리처럼 장시간 �
 - API, 인증, ORM, 비동기 처리 선택은 ADR과 같은 방향이다.
 - OAuth 제공자 최신 정책 확인은 실제 연동 전 별도 작업으로 남기고, MVP1 코딩 착수는 모의 제공자 기준으로 제한했다.
 - 코딩 착수 범위는 도메인 규칙과 테스트 가능한 최소 스캐폴딩으로 제한했다.
+
+## 11. 작업 이력
+
+| 작업일시 | 작업 에이전트 | 작성자 | 내용 한 줄 요약 |
+| :--- | :--- | :--- | :--- |
+| 2026-06-10 00:00 KST | Codex | jkoogi | 하네스 MVP1 인증 설계 초안 작성 |
+| 2026-06-10 00:00 KST | Codex | jkoogi | TypeScript/Vitest 전환과 MVP1 인증 테스트 확장 결과 반영 |
