@@ -1,7 +1,7 @@
 import { createReadStream, existsSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   createInitialReviewState,
   runReviewScenario,
@@ -12,7 +12,11 @@ import {
 type ReviewRequestHandler = (request: Request) => Promise<Response>;
 
 const DEFAULT_PORT = 4173;
-const PUBLIC_DIR = fileURLToPath(new URL("./public", import.meta.url));
+const compiledPublicDir = fileURLToPath(new URL("./public", import.meta.url));
+const sourcePublicDir = join(process.cwd(), "src", "review", "public");
+const PUBLIC_DIR = existsSync(join(compiledPublicDir, "mvp1-review.html"))
+  ? compiledPublicDir
+  : sourcePublicDir;
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -109,6 +113,6 @@ function staticResponse(pathname: string) {
   });
 }
 
-if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, "/")}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   startMvp1ReviewServer();
 }
