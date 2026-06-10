@@ -36,7 +36,7 @@
 | 계정 통합 취소 | `test/unit/auth-domain.test.ts` | 취소 후 승인 시 `MERGE_REQUEST_CANCELLED` 반환 |
 | 중복 승인 방지 | `test/unit/auth-domain.test.ts` | 병합 요청 상태 오류로 방어 |
 | AuditLog 이벤트 | `test/unit/auth-domain.test.ts` | 로그인, 연결, 해제, 병합 요청, 병합 승인 이벤트 확인 |
-| PostgreSQL 저장소 왕복 | `test/integration/auth-repository.integration.test.ts` | `TEST_DATABASE_URL` 또는 `DATABASE_URL` 설정 시 실제 DB에 저장 후 트랜잭션 롤백 |
+| PostgreSQL 저장소 왕복 | `test/integration/auth-repository.integration.test.ts` | `DATABASE_URL` 설정 시 실제 DB에 저장 후 트랜잭션 롤백 |
 
 ## 작업 이력
 

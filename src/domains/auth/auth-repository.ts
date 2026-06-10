@@ -14,6 +14,24 @@ type AuthDatabase = NodePgDatabase<Record<string, never>>;
 
 export async function ensureAuthSchema(db: AuthDatabase) {
   await db.execute(sql`
+    create table if not exists common_code (
+      code_group_cd varchar(100) not null,
+      code_cd varchar(100) not null,
+      code_label varchar(100) not null,
+      code_description text,
+      sort_order integer not null,
+      is_active boolean not null default true,
+      created_sys varchar(50) not null default 'pdfowers',
+      created_at timestamptz not null default now(),
+      created_by varchar(100) not null default 'system',
+      updated_sys varchar(50) not null default 'pdfowers',
+      updated_at timestamptz not null default now(),
+      updated_by varchar(100) not null default 'system',
+      version integer not null default 1,
+      primary key (code_group_cd, code_cd)
+    )
+  `);
+  await db.execute(sql`
     create table if not exists user_account (
       user_uuid uuid primary key,
       display_name varchar(100) not null,

@@ -2,6 +2,7 @@ import {
   boolean,
   integer,
   jsonb,
+  primaryKey,
   pgTable,
   text,
   timestamp,
@@ -19,6 +20,20 @@ const metaColumns = {
   updatedBy: varchar("updated_by", { length: 100 }).notNull().default("system"),
   version: integer("version").notNull().default(1)
 };
+
+export const commonCode = pgTable(
+  "common_code",
+  {
+    codeGroupCd: varchar("code_group_cd", { length: 100 }).notNull(),
+    codeCd: varchar("code_cd", { length: 100 }).notNull(),
+    codeLabel: varchar("code_label", { length: 100 }).notNull(),
+    codeDescription: text("code_description"),
+    sortOrder: integer("sort_order").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    ...metaColumns
+  },
+  (table) => [primaryKey({ columns: [table.codeGroupCd, table.codeCd] })]
+);
 
 export const userAccount = pgTable("user_account", {
   userUuid: uuid("user_uuid").primaryKey(),

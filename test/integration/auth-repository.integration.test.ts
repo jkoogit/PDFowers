@@ -3,6 +3,7 @@ import "dotenv/config";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { Pool, type PoolClient } from "pg";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { normalizePostgresUrl } from "../../src/db/database-url.js";
 import { createLocalUser, linkOAuthIdentity } from "../../src/domains/auth/auth-domain.js";
 import {
   ensureAuthSchema,
@@ -11,7 +12,8 @@ import {
   recordAccountMergeRequest
 } from "../../src/domains/auth/auth-repository.js";
 
-const connectionString = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+const rawConnectionString = process.env.DATABASE_URL;
+const connectionString = rawConnectionString ? normalizePostgresUrl(rawConnectionString) : undefined;
 const describeDb = connectionString ? describe : describe.skip;
 
 function localUser(seed: string) {
@@ -110,6 +112,26 @@ describeDb("인증 저장소 PostgreSQL 통합 테스트", () => {
         provider_user_id: `google-${seed}`,
         merge_status_cd: "pending"
       }
+    ]);
+  });
+
+  test("공통코드 초기데이터가 migration으로 등록되어 있다", async () => {
+    const { rows: summaryRows } = await client.query(
+      `select count(*)::int as total, count(distinct code_group_cd)::int as groups
+         from common_code`
+    );
+    const { rows: providerRows } = await client.query(
+      `select code_cd, code_label
+         from common_code
+        where code_group_cd = 'AUTH_PROVIDER'
+        order by sort_order`
+    );
+
+    expect(summaryRows).toEqual([{ total: 27, groups: 5 }]);
+    expect(providerRows).toEqual([
+      { code_cd: "kakao", code_label: "카카오" },
+      { code_cd: "naver", code_label: "네이버" },
+      { code_cd: "google", code_label: "구글" }
     ]);
   });
 });
