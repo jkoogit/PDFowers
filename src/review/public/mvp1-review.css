@@ -150,6 +150,29 @@ button:disabled {
   padding: 9px;
 }
 
+.kakao-review {
+  align-items: center;
+  background: #fff8d6;
+  border: 1px solid #e1c34b;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 12px;
+}
+
+.kakao-review h4 {
+  font-size: 14px;
+  margin: 0 0 4px;
+}
+
+.kakao-review p {
+  color: #5f5120;
+  font-size: 13px;
+  margin: 0;
+}
+
 .scenario-group h3,
 .state-panel h3 {
   font-size: 15px;
@@ -287,7 +310,13 @@ button:disabled {
   }
 
   .button-grid,
-  .metric-grid {
+  .metric-grid,
+  .kakao-review {
     grid-template-columns: 1fr;
+  }
+
+  .kakao-review {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

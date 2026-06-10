@@ -20,6 +20,11 @@ import {
   type ReviewScenarioId,
   type ReviewState
 } from "./mvp1-review-scenarios.js";
+import type {
+  KakaoAuthProfile,
+  KakaoOAuthClient,
+  KakaoOAuthConfig
+} from "./kakao-oauth.js";
 
 type ReviewRequestHandler = (request: Request) => Promise<Response>;
 
@@ -31,6 +36,8 @@ export interface ReviewPersistence {
 
 interface ReviewHandlerOptions {
   persistence?: ReviewPersistence;
+  kakaoConfig?: Partial<KakaoOAuthConfig>;
+  kakaoOAuth?: KakaoOAuthClient;
 }
 
 const DEFAULT_PORT = 4173;
@@ -52,6 +59,7 @@ export function createReviewRequestHandler(
   let state: ReviewState = initialState;
   let initialized = false;
   const sessions = new Map<string, string>();
+  const kakaoStates = new Set<string>();
 
   async function ensureInitialized() {
     if (!initialized) {
@@ -180,6 +188,67 @@ export function createReviewRequestHandler(
         user: user ? publicUser(user) : null,
         state
       });
+    }
+
+    if (request.method === "GET" && url.pathname === "/auth/kakao/config-status") {
+      const status = kakaoConfigStatus(options);
+      return jsonResponse(status);
+    }
+
+    if (request.method === "GET" && url.pathname === "/auth/kakao/start") {
+      const status = kakaoConfigStatus(options);
+      if (!status.enabled || !options.kakaoOAuth) {
+        return jsonResponse(
+          { ok: false, error: "KAKAO_OAUTH_NOT_CONFIGURED", ...status },
+          503
+        );
+      }
+
+      const oauthState = randomUUID();
+      kakaoStates.add(oauthState);
+      const authorizeUrl = options.kakaoOAuth.buildAuthorizeUrl(oauthState);
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: authorizeUrl.toString(),
+          "set-cookie": kakaoStateCookie(oauthState)
+        }
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/auth/kakao/callback") {
+      if (!options.kakaoOAuth) {
+        return jsonResponse({ ok: false, error: "KAKAO_OAUTH_NOT_CONFIGURED" }, 503);
+      }
+      const code = url.searchParams.get("code");
+      const oauthState = url.searchParams.get("state");
+      const storedState = parseCookie(request.headers.get("cookie") ?? "")["pdfowers_kakao_state"];
+      if (!code) {
+        return jsonResponse({ ok: false, error: "KAKAO_OAUTH_CODE_REQUIRED" }, 400);
+      }
+      if (!oauthState || !storedState || oauthState !== storedState || !kakaoStates.has(oauthState)) {
+        return jsonResponse({ ok: false, error: "KAKAO_OAUTH_STATE_MISMATCH" }, 400);
+      }
+      kakaoStates.delete(oauthState);
+
+      try {
+        const token = await options.kakaoOAuth.exchangeCode(code);
+        const profile = await options.kakaoOAuth.fetchUserProfile(token.accessToken);
+        const result = await signInWithKakaoProfile(profile, state, sessions, options.persistence);
+        state = result.state;
+        return jsonResponse({ ok: true, user: publicUser(result.user), state }, 200, {
+          "set-cookie": sessionCookie(result.sessionId)
+        });
+      } catch (error) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "KAKAO_OAUTH_CALLBACK_FAILED",
+            message: error instanceof Error ? error.message : "Kakao OAuth callback failed"
+          },
+          502
+        );
+      }
     }
 
     if (request.method === "POST" && /^\/auth\/oauth\/[^/]+\/callback$/.test(url.pathname)) {
@@ -401,6 +470,10 @@ function sessionCookie(sessionId: string) {
   return `pdfowers_review_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax`;
 }
 
+function kakaoStateCookie(state: string) {
+  return `pdfowers_kakao_state=${state}; Path=/auth/kakao; HttpOnly; SameSite=Lax`;
+}
+
 function parseCookie(cookieHeader: string) {
   return Object.fromEntries(
     cookieHeader
@@ -442,6 +515,80 @@ function markPassed(state: ReviewState, ...ids: Array<`MVP1-AUTH-T${string}`>) {
   return state.testCases.map((testCase) =>
     ids.includes(testCase.id) ? { ...testCase, status: "passed" as const } : testCase
   );
+}
+
+function kakaoConfigStatus(options: ReviewHandlerOptions) {
+  const missing = [];
+  if (!options.kakaoConfig?.restApiKey) {
+    missing.push("KAKAO_REST_API_KEY");
+  }
+  if (!options.kakaoConfig?.redirectUri) {
+    missing.push("KAKAO_REDIRECT_URI");
+  }
+
+  return {
+    enabled: missing.length === 0 && Boolean(options.kakaoOAuth),
+    missing,
+    redirectUri: options.kakaoConfig?.redirectUri ?? null,
+    scope: options.kakaoConfig?.scope ?? null,
+    clientSecretConfigured: Boolean(options.kakaoConfig?.clientSecret)
+  };
+}
+
+async function signInWithKakaoProfile(
+  profile: KakaoAuthProfile,
+  state: ReviewState,
+  sessions: Map<string, string>,
+  persistence?: ReviewPersistence
+) {
+  const loginResult = findOAuthLogin(state.users, profile.provider, profile.providerUserId);
+  if (loginResult.ok) {
+    const user = state.users.find((candidate) => candidate.userUuid === loginResult.userUuid)!;
+    const sessionId = createSession(sessions, user.userUuid);
+    const nextState = {
+      ...state,
+      currentUserUuid: user.userUuid,
+      testCases: markPassed(state, "MVP1-AUTH-T007", "MVP1-AUTH-T020")
+    };
+    return {
+      user,
+      sessionId,
+      state: persistence ? await persistence.persist(nextState) : nextState
+    };
+  }
+
+  const loginId = uniqueLoginId(state.users, `kakao-${profile.providerUserId}`);
+  const user = createOAuthUser({
+    loginId,
+    email: profile.emailFromProvider ?? `${loginId}@kakao.local.test`,
+    password: randomUUID(),
+    displayName: profile.displayName,
+    provider: profile.provider,
+    providerUserId: profile.providerUserId,
+    emailFromProvider: profile.emailFromProvider
+  });
+  const sessionId = createSession(sessions, user.userUuid);
+  const nextState = {
+    ...state,
+    users: [...state.users, user],
+    currentUserUuid: user.userUuid,
+    testCases: markPassed(state, "MVP1-AUTH-T006")
+  };
+  return {
+    user,
+    sessionId,
+    state: persistence ? await persistence.persist(nextState) : nextState
+  };
+}
+
+function uniqueLoginId(users: AuthUser[], requestedLoginId: string) {
+  let loginId = requestedLoginId.replace(/[^a-zA-Z0-9._-]/g, "-");
+  let suffix = 1;
+  while (users.some((user) => user.loginId === loginId)) {
+    suffix += 1;
+    loginId = `${requestedLoginId}-${suffix}`;
+  }
+  return loginId;
 }
 
 async function readNodeRequestBody(request: IncomingMessage): Promise<BodyInit | undefined> {

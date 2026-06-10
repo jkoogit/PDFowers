@@ -14,6 +14,7 @@ const elements = {
   metricDbIdentities: document.querySelector("#metric-db-identities"),
   metricDbAudit: document.querySelector("#metric-db-audit"),
   apiResult: document.querySelector("#api-result"),
+  kakaoConfigStatus: document.querySelector("#kakao-config-status"),
   messageList: document.querySelector("#message-list"),
   auditList: document.querySelector("#audit-list"),
   accountList: document.querySelector("#account-list"),
@@ -46,11 +47,16 @@ for (const button of document.querySelectorAll("[data-api-action]")) {
   });
 }
 
-await loadState();
+await Promise.all([loadState(), loadKakaoConfigStatus()]);
 
 async function loadState() {
   const response = await fetch("/api/review/state");
   renderState(await response.json());
+}
+
+async function loadKakaoConfigStatus() {
+  const status = await getJson("/auth/kakao/config-status");
+  renderKakaoConfigStatus(status);
 }
 
 async function resetState() {
@@ -155,6 +161,20 @@ async function runApiAction(action) {
       setText(elements.apiResult, "API 병합 흐름 완료: identity 충돌 및 승인");
     }
 
+    if (action === "api-kakao-start") {
+      const status = await getJson("/auth/kakao/config-status");
+      renderKakaoConfigStatus(status);
+      if (!status.enabled) {
+        setText(
+          elements.apiResult,
+          `카카오 설정 필요: ${status.missing?.join(", ") || "Kakao OAuth client"}`
+        );
+        return;
+      }
+      window.location.assign("/auth/kakao/start");
+      return;
+    }
+
     await loadState();
   });
 }
@@ -237,6 +257,21 @@ function renderState(reviewState) {
   renderAuditLogs(auditLogs);
   renderAccounts(users, mergeRequests);
   renderTestCases(testCases);
+}
+
+function renderKakaoConfigStatus(status) {
+  if (status.enabled) {
+    setText(
+      elements.kakaoConfigStatus,
+      `연결 가능 / Redirect URI: ${status.redirectUri}${status.scope ? ` / Scope: ${status.scope}` : ""}`
+    );
+    return;
+  }
+
+  setText(
+    elements.kakaoConfigStatus,
+    `설정 필요: ${safeArray(status.missing).join(", ") || "Kakao OAuth client"}`
+  );
 }
 
 function reviewPrefix() {
