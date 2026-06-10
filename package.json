@@ -9,6 +9,7 @@
     "test:integration": "vitest run test/integration",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "review:mvp1": "node --experimental-strip-types src/review/mvp1-review-server.ts",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
