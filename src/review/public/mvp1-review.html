@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDFowers MVP1 검수</title>
+    <link rel="stylesheet" href="/mvp1-review.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PDFowers internal review</p>
+        <h1>MVP1 인증 검수</h1>
+      </div>
+      <div class="topbar-actions">
+        <button id="refresh-state" type="button">새로고침</button>
+        <button id="reset-state" class="danger" type="button">상태 초기화</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel scenario-panel" aria-labelledby="scenario-title">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Scenario</p>
+            <h2 id="scenario-title">검수 시나리오</h2>
+          </div>
+          <span id="current-user" class="pill">현재 사용자 없음</span>
+        </div>
+
+        <div class="scenario-groups">
+          <div class="scenario-group">
+            <h3>기본 계정</h3>
+            <div class="button-grid">
+              <button data-scenario="local-signup" type="button">ID/PW 회원가입</button>
+              <button data-scenario="local-login-success" type="button">ID/PW 로그인 성공</button>
+              <button data-scenario="local-login-email-required" type="button">이메일 인증 정책</button>
+            </div>
+          </div>
+
+          <div class="scenario-group">
+            <h3>OAuth 연결</h3>
+            <div class="button-grid">
+              <button data-scenario="oauth-signup" type="button">OAuth 신규 가입</button>
+              <button data-scenario="oauth-login" type="button">OAuth 기존 로그인</button>
+              <button data-scenario="oauth-link-current-user" type="button">현재 계정 연결</button>
+              <button data-scenario="oauth-unlink" type="button">OAuth 해제</button>
+            </div>
+          </div>
+
+          <div class="scenario-group">
+            <h3>계정 통합</h3>
+            <div class="button-grid">
+              <button data-scenario="oauth-link-conflict" type="button">OAuth 충돌 연결</button>
+              <button data-scenario="merge-approve" type="button">계정 통합 승인</button>
+              <button data-scenario="merge-cancel" type="button">계정 통합 취소</button>
+              <button data-scenario="merge-expire" type="button">계정 통합 만료</button>
+            </div>
+          </div>
+
+          <div class="scenario-group">
+            <h3>이메일</h3>
+            <div class="button-grid">
+              <button data-scenario="verified-email-delete-blocked" type="button">인증 이메일 삭제 차단</button>
+              <button data-scenario="email-change-confirm" type="button">이메일 변경 확인</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel state-panel" aria-labelledby="state-title">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">State</p>
+            <h2 id="state-title">상태 확인</h2>
+          </div>
+        </div>
+        <div class="metric-grid">
+          <div>
+            <span class="metric-label">사용자</span>
+            <strong id="metric-users">0</strong>
+          </div>
+          <div>
+            <span class="metric-label">Identity</span>
+            <strong id="metric-identities">0</strong>
+          </div>
+          <div>
+            <span class="metric-label">병합 요청</span>
+            <strong id="metric-merges">0</strong>
+          </div>
+          <div>
+            <span class="metric-label">통과</span>
+            <strong id="metric-passed">0</strong>
+          </div>
+        </div>
+
+        <h3>최근 메시지</h3>
+        <ul id="message-list" class="message-list"></ul>
+
+        <h3>AuditLog</h3>
+        <ul id="audit-list" class="audit-list"></ul>
+      </aside>
+
+      <section class="panel full-width" aria-labelledby="accounts-title">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Accounts</p>
+            <h2 id="accounts-title">계정 및 통합 상태</h2>
+          </div>
+        </div>
+        <div id="account-list" class="account-list"></div>
+      </section>
+
+      <section class="panel full-width" aria-labelledby="checklist-title">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">MVP1-AUTH</p>
+            <h2 id="checklist-title">검수 체크리스트</h2>
+          </div>
+        </div>
+        <div id="test-case-list" class="test-case-list"></div>
+      </section>
+    </main>
+
+    <script src="/mvp1-review.js" type="module"></script>
+  </body>
+</html>

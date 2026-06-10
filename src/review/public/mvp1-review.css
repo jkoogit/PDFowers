@@ -1,0 +1,277 @@
+:root {
+  color-scheme: light;
+  font-family:
+    Inter, "Segoe UI", "Malgun Gothic", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f4f6f8;
+  color: #18202a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button {
+  min-height: 38px;
+  border: 1px solid #b8c1cc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #18202a;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  padding: 8px 12px;
+}
+
+button:hover {
+  border-color: #3b6b92;
+  color: #16466a;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.danger {
+  border-color: #b45d5d;
+  color: #8c2424;
+}
+
+.topbar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #d8dee6;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 18px 24px;
+}
+
+.topbar h1,
+.panel h2,
+.scenario-group h3,
+.state-panel h3 {
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.topbar h1 {
+  font-size: 24px;
+}
+
+.topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.eyebrow {
+  color: #607080;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  padding: 16px 24px 32px;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.panel-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.panel h2 {
+  font-size: 18px;
+}
+
+.pill,
+.status {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.pill {
+  background: #e9eef3;
+  color: #384958;
+}
+
+.scenario-groups {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scenario-group {
+  border: 1px solid #e2e7ee;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.scenario-group h3,
+.state-panel h3 {
+  font-size: 15px;
+  margin-bottom: 10px;
+}
+
+.button-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.state-panel {
+  min-width: 0;
+}
+
+.metric-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.metric-grid > div {
+  background: #f4f6f8;
+  border: 1px solid #e2e7ee;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.metric-label {
+  color: #607080;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.metric-grid strong {
+  font-size: 22px;
+}
+
+.message-list,
+.audit-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+}
+
+.message-list li,
+.audit-list li {
+  background: #f8fafc;
+  border: 1px solid #e2e7ee;
+  border-radius: 6px;
+  color: #384958;
+  font-size: 13px;
+  padding: 9px;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.account-list,
+.test-case-list {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.account-item,
+.test-case-item {
+  border: 1px solid #e2e7ee;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.account-item h3,
+.test-case-item h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.account-item dl {
+  display: grid;
+  gap: 5px 8px;
+  grid-template-columns: 90px minmax(0, 1fr);
+  margin: 0;
+}
+
+.account-item dt {
+  color: #607080;
+  font-size: 12px;
+}
+
+.account-item dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.status-pending {
+  background: #edf1f5;
+  color: #526273;
+}
+
+.status-passed {
+  background: #e4f3ea;
+  color: #23613b;
+}
+
+.status-failed {
+  background: #f8e9e9;
+  color: #8c2424;
+}
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .scenario-groups {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .layout {
+    padding: 12px;
+  }
+
+  .button-grid,
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
