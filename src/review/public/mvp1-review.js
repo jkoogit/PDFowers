@@ -1,5 +1,6 @@
 const state = {
-  busy: false
+  busy: false,
+  reviewState: null
 };
 
 const elements = {
@@ -12,6 +13,7 @@ const elements = {
   metricDbUsers: document.querySelector("#metric-db-users"),
   metricDbIdentities: document.querySelector("#metric-db-identities"),
   metricDbAudit: document.querySelector("#metric-db-audit"),
+  apiResult: document.querySelector("#api-result"),
   messageList: document.querySelector("#message-list"),
   auditList: document.querySelector("#audit-list"),
   accountList: document.querySelector("#account-list"),
@@ -31,6 +33,15 @@ for (const button of document.querySelectorAll("[data-scenario]")) {
     const scenarioId = button.getAttribute("data-scenario");
     if (scenarioId) {
       void runScenario(scenarioId);
+    }
+  });
+}
+
+for (const button of document.querySelectorAll("[data-api-action]")) {
+  button.addEventListener("click", () => {
+    const action = button.getAttribute("data-api-action");
+    if (action) {
+      void runApiAction(action);
     }
   });
 }
@@ -58,12 +69,132 @@ async function runScenario(scenarioId) {
   });
 }
 
+async function runApiAction(action) {
+  await withBusy(async () => {
+    if (action === "api-local-signup") {
+      const prefix = reviewPrefix();
+      await postJson("/auth/signup/local", {
+        loginId: `${prefix}-api-local`,
+        email: `${prefix}-api-local@example.test`,
+        password: "correct-password",
+        displayName: "API 검수 로컬",
+        emailVerified: true
+      });
+      setText(elements.apiResult, "API 회원가입 완료: /auth/signup/local");
+    }
+
+    if (action === "api-local-login") {
+      const prefix = reviewPrefix();
+      await postJson("/auth/login/local", {
+        loginId: `${prefix}-api-local`,
+        password: "correct-password",
+        emailVerificationRequired: true
+      });
+      setText(elements.apiResult, "API 로그인 완료: /auth/login/local");
+    }
+
+    if (action === "api-session") {
+      const body = await getJson("/auth/session");
+      setText(
+        elements.apiResult,
+        body.authenticated
+          ? `API 세션 확인: ${body.user.loginId}`
+          : "API 세션 확인: 로그인 상태 없음"
+      );
+      renderState(body.state);
+      return;
+    }
+
+    if (action === "api-oauth-signup") {
+      const prefix = reviewPrefix();
+      await postJson("/auth/oauth/kakao/callback", {
+        providerUserId: `${prefix}-api-kakao`,
+        emailFromProvider: `${prefix}-api-kakao@example.test`,
+        loginId: `${prefix}-api-kakao-owner`,
+        password: "correct-password",
+        displayName: "API 검수 카카오"
+      });
+      setText(elements.apiResult, "API OAuth 가입 완료: /auth/oauth/kakao/callback");
+    }
+
+    if (action === "api-oauth-login") {
+      const prefix = reviewPrefix();
+      await postJson("/auth/oauth/kakao/callback", {
+        providerUserId: `${prefix}-api-kakao`
+      });
+      setText(elements.apiResult, "API OAuth 로그인 완료: /auth/oauth/kakao/callback");
+    }
+
+    if (action === "api-merge-flow") {
+      const prefix = reviewPrefix();
+      await postJson("/auth/signup/local", {
+        loginId: `${prefix}-api-merge-requester`,
+        email: `${prefix}-api-merge-requester@example.test`,
+        password: "correct-password",
+        displayName: "API 병합 요청자",
+        emailVerified: true
+      });
+      await postJson("/auth/oauth/google/callback", {
+        providerUserId: `${prefix}-api-merge-google`,
+        emailFromProvider: `${prefix}-api-merge-target@example.test`,
+        loginId: `${prefix}-api-merge-target`,
+        password: "correct-password",
+        displayName: "API 병합 대상"
+      });
+      await postJson("/auth/login/local", {
+        loginId: `${prefix}-api-merge-requester`,
+        password: "correct-password",
+        emailVerificationRequired: true
+      });
+      const conflict = await postJson("/auth/identities/google", {
+        providerUserId: `${prefix}-api-merge-google`
+      });
+      if (conflict.mergeRequest?.mergeRequestUuid) {
+        await postJson(`/auth/merge-requests/${conflict.mergeRequest.mergeRequestUuid}/approve`, {});
+      }
+      setText(elements.apiResult, "API 병합 흐름 완료: identity 충돌 및 승인");
+    }
+
+    await loadState();
+  });
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const body = await response.json();
+  if (body.state) {
+    renderState(body.state);
+  }
+  if (!response.ok && !body.mergeRequest) {
+    throw new Error(body.error ?? "API request failed");
+  }
+  return body;
+}
+
+async function getJson(url) {
+  const response = await fetch(url);
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error ?? "API request failed");
+  }
+  return body;
+}
+
 async function withBusy(work) {
   if (state.busy) return;
   state.busy = true;
   setButtonsDisabled(true);
   try {
     await work();
+  } catch (error) {
+    setText(
+      elements.apiResult,
+      error instanceof Error ? `API 오류: ${error.message}` : "API 오류가 발생했습니다."
+    );
   } finally {
     state.busy = false;
     setButtonsDisabled(false);
@@ -77,6 +208,7 @@ function setButtonsDisabled(disabled) {
 }
 
 function renderState(reviewState) {
+  state.reviewState = reviewState;
   const users = Array.isArray(reviewState.users) ? reviewState.users : [];
   const mergeRequests = Array.isArray(reviewState.mergeRequests) ? reviewState.mergeRequests : [];
   const testCases = Array.isArray(reviewState.testCases) ? reviewState.testCases : [];
@@ -105,6 +237,10 @@ function renderState(reviewState) {
   renderAuditLogs(auditLogs);
   renderAccounts(users, mergeRequests);
   renderTestCases(testCases);
+}
+
+function reviewPrefix() {
+  return state.reviewState?.runId ?? `review-${Date.now()}`;
 }
 
 function renderMessages(messages) {

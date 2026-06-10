@@ -29,6 +29,19 @@
         </div>
 
         <div class="scenario-groups">
+          <div class="scenario-group api-group">
+            <h3>실제 API 검수</h3>
+            <div class="button-grid">
+              <button data-api-action="api-local-signup" type="button">API 회원가입</button>
+              <button data-api-action="api-local-login" type="button">API 로그인</button>
+              <button data-api-action="api-session" type="button">API 세션 확인</button>
+              <button data-api-action="api-oauth-signup" type="button">API OAuth 가입</button>
+              <button data-api-action="api-oauth-login" type="button">API OAuth 로그인</button>
+              <button data-api-action="api-merge-flow" type="button">API 병합 흐름</button>
+            </div>
+            <p id="api-result" class="api-result">실제 API 호출 대기 중</p>
+          </div>
+
           <div class="scenario-group">
             <h3>기본 계정</h3>
             <div class="button-grid">

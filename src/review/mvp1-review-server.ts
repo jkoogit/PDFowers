@@ -2,6 +2,18 @@ import { createReadStream, existsSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { randomUUID } from "node:crypto";
+import {
+  approveMergeRequest,
+  createLocalUser,
+  createOAuthUser,
+  findOAuthLogin,
+  linkOAuthIdentity,
+  unlinkOAuthIdentity,
+  verifyLocalLogin,
+  type AuthProvider,
+  type AuthUser
+} from "../domains/auth/auth-domain.js";
 import {
   createInitialReviewState,
   runReviewScenario,
@@ -39,6 +51,7 @@ export function createReviewRequestHandler(
 ): ReviewRequestHandler {
   let state: ReviewState = initialState;
   let initialized = false;
+  const sessions = new Map<string, string>();
 
   async function ensureInitialized() {
     if (!initialized) {
@@ -82,6 +95,247 @@ export function createReviewRequestHandler(
       }
     }
 
+    if (request.method === "POST" && url.pathname === "/auth/signup/local") {
+      const payload = await readJsonBody<{
+        loginId?: string;
+        email?: string;
+        password?: string;
+        displayName?: string;
+        emailVerified?: boolean;
+      }>(request);
+      if (!payload.loginId || !payload.email || !payload.password || !payload.displayName) {
+        return jsonResponse({ ok: false, error: "INVALID_SIGNUP_REQUEST" }, 400);
+      }
+      if (state.users.some((user) => user.loginId === payload.loginId)) {
+        return jsonResponse({ ok: false, error: "LOGIN_ID_ALREADY_EXISTS" }, 409);
+      }
+
+      const user = createLocalUser({
+        loginId: payload.loginId,
+        email: payload.email,
+        password: payload.password,
+        displayName: payload.displayName,
+        emailVerifiedAt: payload.emailVerified ? new Date() : null
+      });
+      state = {
+        ...state,
+        users: [...state.users, user],
+        currentUserUuid: user.userUuid,
+        testCases: markPassed(state, "MVP1-AUTH-T001")
+      };
+      const sessionId = createSession(sessions, user.userUuid);
+      state = options.persistence ? await options.persistence.persist(state) : state;
+      return jsonResponse(
+        {
+          ok: true,
+          user: publicUser(user),
+          state
+        },
+        200,
+        { "set-cookie": sessionCookie(sessionId) }
+      );
+    }
+
+    if (request.method === "POST" && url.pathname === "/auth/login/local") {
+      const payload = await readJsonBody<{
+        loginId?: string;
+        password?: string;
+        emailVerificationRequired?: boolean;
+      }>(request);
+      const user = state.users.find((candidate) => candidate.loginId === payload.loginId);
+      if (!user || !payload.password) {
+        return jsonResponse({ ok: false, error: "INVALID_CREDENTIALS" }, 401);
+      }
+
+      const result = verifyLocalLogin(user, payload.password, {
+        emailVerificationRequired: payload.emailVerificationRequired
+      });
+      if (!result.ok) {
+        state = options.persistence ? await options.persistence.persist(state) : state;
+        return jsonResponse({ ok: false, error: result.error, state }, 401);
+      }
+
+      state = {
+        ...state,
+        currentUserUuid: user.userUuid,
+        testCases: markPassed(state, "MVP1-AUTH-T004", "MVP1-AUTH-T005")
+      };
+      const sessionId = createSession(sessions, user.userUuid);
+      state = options.persistence ? await options.persistence.persist(state) : state;
+      return jsonResponse(
+        {
+          ok: true,
+          user: publicUser(user),
+          state
+        },
+        200,
+        { "set-cookie": sessionCookie(sessionId) }
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === "/auth/session") {
+      const user = currentSessionUser(request, sessions, state);
+      return jsonResponse({
+        authenticated: Boolean(user),
+        user: user ? publicUser(user) : null,
+        state
+      });
+    }
+
+    if (request.method === "POST" && /^\/auth\/oauth\/[^/]+\/callback$/.test(url.pathname)) {
+      const provider = url.pathname.split("/")[3];
+      if (!isAuthProvider(provider)) {
+        return jsonResponse({ ok: false, error: "UNSUPPORTED_AUTH_PROVIDER" }, 400);
+      }
+
+      const payload = await readJsonBody<{
+        providerUserId?: string;
+        emailFromProvider?: string;
+        loginId?: string;
+        password?: string;
+        displayName?: string;
+      }>(request);
+      if (!payload.providerUserId) {
+        return jsonResponse({ ok: false, error: "INVALID_OAUTH_CALLBACK_REQUEST" }, 400);
+      }
+
+      const loginResult = findOAuthLogin(state.users, provider, payload.providerUserId);
+      if (loginResult.ok) {
+        const user = state.users.find((candidate) => candidate.userUuid === loginResult.userUuid)!;
+        const sessionId = createSession(sessions, user.userUuid);
+        state = {
+          ...state,
+          currentUserUuid: user.userUuid,
+          testCases: markPassed(state, "MVP1-AUTH-T007", "MVP1-AUTH-T020")
+        };
+        state = options.persistence ? await options.persistence.persist(state) : state;
+        return jsonResponse({ ok: true, user: publicUser(user), state }, 200, {
+          "set-cookie": sessionCookie(sessionId)
+        });
+      }
+
+      if (!payload.loginId || !payload.password || !payload.displayName) {
+        return jsonResponse({ ok: false, error: "OAUTH_SIGNUP_REQUIRED" }, 404);
+      }
+
+      const user = createOAuthUser({
+        loginId: payload.loginId,
+        email: payload.emailFromProvider ?? `${payload.loginId}@example.test`,
+        password: payload.password,
+        displayName: payload.displayName,
+        provider,
+        providerUserId: payload.providerUserId,
+        emailFromProvider: payload.emailFromProvider
+      });
+      state = {
+        ...state,
+        users: [...state.users, user],
+        currentUserUuid: user.userUuid,
+        testCases: markPassed(state, "MVP1-AUTH-T006")
+      };
+      const sessionId = createSession(sessions, user.userUuid);
+      state = options.persistence ? await options.persistence.persist(state) : state;
+      return jsonResponse({ ok: true, user: publicUser(user), state }, 200, {
+        "set-cookie": sessionCookie(sessionId)
+      });
+    }
+
+    if (
+      (request.method === "POST" || request.method === "DELETE") &&
+      /^\/auth\/identities\/[^/]+$/.test(url.pathname)
+    ) {
+      const provider = url.pathname.split("/")[3];
+      if (!isAuthProvider(provider)) {
+        return jsonResponse({ ok: false, error: "UNSUPPORTED_AUTH_PROVIDER" }, 400);
+      }
+      const currentUser = currentSessionUser(request, sessions, state);
+      if (!currentUser) {
+        return jsonResponse({ ok: false, error: "AUTHENTICATION_REQUIRED" }, 401);
+      }
+
+      if (request.method === "DELETE") {
+        const result = unlinkOAuthIdentity({ user: currentUser, provider });
+        if (!result.ok) {
+          return jsonResponse({ ok: false, error: result.error, state }, 409);
+        }
+        state = {
+          ...state,
+          testCases: markPassed(state, "MVP1-AUTH-T015")
+        };
+        state = options.persistence ? await options.persistence.persist(state) : state;
+        return jsonResponse({ ok: true, user: publicUser(currentUser), state });
+      }
+
+      const payload = await readJsonBody<{
+        providerUserId?: string;
+        emailFromProvider?: string;
+      }>(request);
+      if (!payload.providerUserId) {
+        return jsonResponse({ ok: false, error: "INVALID_IDENTITY_LINK_REQUEST" }, 400);
+      }
+
+      const result = linkOAuthIdentity({
+        currentUser,
+        allUsers: state.users,
+        provider,
+        providerUserId: payload.providerUserId,
+        emailFromProvider: payload.emailFromProvider
+      });
+      if (result.ok) {
+        state = {
+          ...state,
+          testCases: markPassed(state, "MVP1-AUTH-T009")
+        };
+        state = options.persistence ? await options.persistence.persist(state) : state;
+        return jsonResponse({ ok: true, user: publicUser(currentUser), state });
+      }
+
+      if (result.mergeRequest) {
+        state = {
+          ...state,
+          mergeRequests: [...state.mergeRequests, result.mergeRequest],
+          testCases: markPassed(state, "MVP1-AUTH-T011", "MVP1-AUTH-T014")
+        };
+        state = options.persistence ? await options.persistence.persist(state) : state;
+        return jsonResponse(
+          { ok: false, error: result.error, mergeRequest: result.mergeRequest, state },
+          409
+        );
+      }
+
+      return jsonResponse({ ok: false, error: result.error, state }, 409);
+    }
+
+    if (request.method === "POST" && /^\/auth\/merge-requests\/[^/]+\/approve$/.test(url.pathname)) {
+      const currentUser = currentSessionUser(request, sessions, state);
+      if (!currentUser) {
+        return jsonResponse({ ok: false, error: "AUTHENTICATION_REQUIRED" }, 401);
+      }
+      const mergeRequestUuid = url.pathname.split("/")[3];
+      const mergeRequest = state.mergeRequests.find(
+        (candidate) => candidate.mergeRequestUuid === mergeRequestUuid
+      );
+      if (!mergeRequest) {
+        return jsonResponse({ ok: false, error: "MERGE_REQUEST_NOT_FOUND" }, 404);
+      }
+      const requestUser = state.users.find((user) => user.userUuid === mergeRequest.requestUserUuid);
+      const targetUser = state.users.find((user) => user.userUuid === mergeRequest.targetUserUuid);
+      if (!requestUser || !targetUser) {
+        return jsonResponse({ ok: false, error: "MERGE_USER_NOT_FOUND" }, 404);
+      }
+      const result = approveMergeRequest({ requestUser, targetUser, mergeRequest });
+      if (!result.ok) {
+        return jsonResponse({ ok: false, error: result.error, state }, 409);
+      }
+      state = {
+        ...state,
+        currentUserUuid: requestUser.userUuid,
+        testCases: markPassed(state, "MVP1-AUTH-T012")
+      };
+      state = options.persistence ? await options.persistence.persist(state) : state;
+      return jsonResponse({ ok: true, state });
+    }
+
     if (request.method === "GET") {
       return staticResponse(url.pathname);
     }
@@ -111,20 +365,96 @@ async function handleNodeRequest(
   request: IncomingMessage,
   response: ServerResponse
 ) {
+  const body = await readNodeRequestBody(request);
   const webRequest = new Request(`http://localhost${request.url ?? "/"}`, {
     method: request.method,
-    headers: request.headers as HeadersInit
+    headers: request.headers as HeadersInit,
+    body
   });
   const webResponse = await handler(webRequest);
   response.writeHead(webResponse.status, Object.fromEntries(webResponse.headers.entries()));
   response.end(Buffer.from(await webResponse.arrayBuffer()));
 }
 
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8" }
+    headers: { "content-type": "application/json; charset=utf-8", ...headers }
   });
+}
+
+async function readJsonBody<T extends object>(request: Request): Promise<T> {
+  try {
+    return (await request.json()) as T;
+  } catch {
+    return {} as T;
+  }
+}
+
+function createSession(sessions: Map<string, string>, userUuid: string) {
+  const sessionId = randomUUID();
+  sessions.set(sessionId, userUuid);
+  return sessionId;
+}
+
+function sessionCookie(sessionId: string) {
+  return `pdfowers_review_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax`;
+}
+
+function parseCookie(cookieHeader: string) {
+  return Object.fromEntries(
+    cookieHeader
+      .split(";")
+      .map((entry) => entry.trim().split("="))
+      .filter(([key, value]) => key && value)
+  );
+}
+
+function currentSessionUser(
+  request: Request,
+  sessions: Map<string, string>,
+  state: ReviewState
+): AuthUser | undefined {
+  const sessionId = parseCookie(request.headers.get("cookie") ?? "")["pdfowers_review_session"];
+  const userUuid = sessionId ? sessions.get(sessionId) : undefined;
+  return state.users.find((candidate) => candidate.userUuid === userUuid);
+}
+
+function isAuthProvider(provider: string | undefined): provider is AuthProvider {
+  return provider === "kakao" || provider === "naver" || provider === "google";
+}
+
+function publicUser(user: AuthUser) {
+  return {
+    userUuid: user.userUuid,
+    loginId: user.loginId,
+    primaryEmail: user.primaryEmail,
+    displayName: user.displayName,
+    status: user.status,
+    identities: user.identities.map((identity) => ({
+      provider: identity.provider,
+      providerUserId: identity.providerUserId
+    }))
+  };
+}
+
+function markPassed(state: ReviewState, ...ids: Array<`MVP1-AUTH-T${string}`>) {
+  return state.testCases.map((testCase) =>
+    ids.includes(testCase.id) ? { ...testCase, status: "passed" as const } : testCase
+  );
+}
+
+async function readNodeRequestBody(request: IncomingMessage): Promise<BodyInit | undefined> {
+  if (request.method === "GET" || request.method === "HEAD") {
+    return undefined;
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  return chunks.length > 0 ? Buffer.concat(chunks) : undefined;
 }
 
 function staticResponse(pathname: string) {

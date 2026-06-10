@@ -134,6 +134,22 @@ button:disabled {
   padding: 14px;
 }
 
+.api-group {
+  border-color: #b8c9d6;
+  grid-column: 1 / -1;
+}
+
+.api-result {
+  background: #f4f6f8;
+  border: 1px solid #e2e7ee;
+  border-radius: 6px;
+  color: #384958;
+  font-size: 13px;
+  margin: 10px 0 0;
+  min-height: 36px;
+  padding: 9px;
+}
+
 .scenario-group h3,
 .state-panel h3 {
   font-size: 15px;
