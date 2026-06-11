@@ -1,0 +1,10 @@
+.git
+.codex-remote-attachments
+.superpowers
+node_modules
+dist
+coverage
+.env
+.env.*
+deploy/**/.env
+npm-debug.log*
