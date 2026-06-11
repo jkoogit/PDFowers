@@ -55,3 +55,4 @@
 | 2026-06-08 02:20 KST | Codex | jkoogi | 문서 작업 이력 섹션 추가 |
 | 2026-06-09 23:40 KST | Codex | jkoogi | MVP1 보완점 및 하네스 준비 작업 리뷰 문서 추가 |
 | 2026-06-09 23:50 KST | Codex | jkoogi | dev-stg-main 브랜치 승급 기록 문서 추가 |
+| 2026-06-12 01:05 KST | Codex | jkoogi | 환경별 배포 구성 작업 리뷰 문서 추가 |

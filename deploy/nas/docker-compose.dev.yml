@@ -1,0 +1,17 @@
+services:
+  pdfowers_dev:
+    image: ghcr.io/jkoogit/pdfowers:dev
+    pull_policy: always
+    restart: unless-stopped
+    container_name: pdfowers_dev
+    ports:
+      - "${PDFOWERS_DEV_PORT:-4173}:4173"
+    environment:
+      NODE_ENV: production
+      APP_ENV: dev
+      PORT: "4173"
+      DATABASE_URL: ${DATABASE_URL}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
+      KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET}
+      KAKAO_SCOPE: ${KAKAO_SCOPE:-}
