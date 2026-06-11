@@ -3,4 +3,5 @@ coverage/
 dist/
 .env
 .env.*
+!deploy/**/.env.example
 .superpowers/
