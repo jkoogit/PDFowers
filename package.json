@@ -9,6 +9,7 @@
     "test:integration": "vitest run test/integration",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "review:mvp1": "tsc --outDir dist && node dist/src/review/mvp1-review-runner.js",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
