@@ -215,6 +215,7 @@ button:disabled {
 }
 
 .message-list,
+.notification-list,
 .audit-list {
   display: grid;
   gap: 8px;
@@ -224,6 +225,7 @@ button:disabled {
 }
 
 .message-list li,
+.notification-list li,
 .audit-list li {
   background: #f8fafc;
   border: 1px solid #e2e7ee;
@@ -231,6 +233,16 @@ button:disabled {
   color: #384958;
   font-size: 13px;
   padding: 9px;
+}
+
+.notification-sent,
+.notification-recorded {
+  border-color: #b9d7c6;
+}
+
+.notification-failed {
+  border-color: #d9b3b3;
+  color: #8c2424;
 }
 
 .full-width {
