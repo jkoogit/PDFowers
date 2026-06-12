@@ -8,6 +8,7 @@ import {
 } from "./mvp1-review-persistence.js";
 import { startMvp1ReviewServer } from "./mvp1-review-server.js";
 import { createKakaoOAuthClient, type KakaoOAuthConfig } from "./kakao-oauth.js";
+import { createEmailSenderFromEnv } from "./smtp-email-sender.js";
 
 const connectionString = process.env.DATABASE_URL
   ? normalizePostgresUrl(process.env.DATABASE_URL)
@@ -22,7 +23,8 @@ const kakaoConfig = createKakaoConfigFromEnv();
 startMvp1ReviewServer(Number(process.env.PORT ?? 4173), {
   persistence,
   kakaoConfig,
-  kakaoOAuth: kakaoConfig ? createKakaoOAuthClient(kakaoConfig) : undefined
+  kakaoOAuth: kakaoConfig ? createKakaoOAuthClient(kakaoConfig) : undefined,
+  emailSender: createEmailSenderFromEnv(process.env)
 });
 
 function createKakaoConfigFromEnv(): KakaoOAuthConfig | undefined {

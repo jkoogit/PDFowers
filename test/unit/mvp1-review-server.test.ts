@@ -183,8 +183,15 @@ describe("MVP1 검수 서버", () => {
     expect(body).toMatchObject({ ok: true, user: { loginId: "api-kakao-owner" } });
   });
 
-  test("identity 연결 API는 로그인 cookie를 사용하고 충돌 시 병합 요청을 만든다", async () => {
-    const handler = createReviewRequestHandler();
+  test("identity 연결 API는 로그인 cookie를 사용하고 충돌 시 병합 요청과 알림 이벤트를 만든다", async () => {
+    const sentMessages: string[] = [];
+    const handler = createReviewRequestHandler(undefined, {
+      emailSender: {
+        send: async (message) => {
+          sentMessages.push(message.to);
+        }
+      }
+    });
     const requesterSignup = await handler(
       new Request("http://localhost/auth/signup/local", {
         method: "POST",
@@ -224,13 +231,26 @@ describe("MVP1 검수 서버", () => {
       ok: boolean;
       error: string;
       mergeRequest: { mergeRequestUuid: string };
-      state: { mergeRequests: unknown[] };
+      state: {
+        mergeRequests: unknown[];
+        notifications: Array<{
+          eventType: string;
+          channel: string;
+          status: string;
+        }>;
+      };
     };
 
     expect(conflict.status).toBe(409);
     expect(conflictBody.error).toBe("ACCOUNT_MERGE_REQUIRED");
     expect(conflictBody.mergeRequest.mergeRequestUuid).toBeTruthy();
     expect(conflictBody.state.mergeRequests).toHaveLength(1);
+    expect(conflictBody.state.notifications).toHaveLength(2);
+    expect(conflictBody.state.notifications[0]).toMatchObject({
+      eventType: "ACCOUNT_MERGE_REQUESTED",
+      channel: "sample",
+      status: "recorded"
+    });
 
     const approve = await handler(
       new Request(`http://localhost/auth/merge-requests/${conflictBody.mergeRequest.mergeRequestUuid}/approve`, {
@@ -238,10 +258,23 @@ describe("MVP1 검수 서버", () => {
         headers: { cookie: requesterCookie }
       })
     );
-    const approveBody = (await approve.json()) as { ok: boolean; state: { users: Array<{ status: string }> } };
+    const approveBody = (await approve.json()) as {
+      ok: boolean;
+      state: {
+        users: Array<{ status: string }>;
+        notifications: Array<{ eventType: string; channel: string; status: string }>;
+      };
+    };
 
     expect(approve.status).toBe(200);
     expect(approveBody.ok).toBe(true);
     expect(approveBody.state.users.some((user) => user.status === "merged")).toBe(true);
+    expect(approveBody.state.notifications).toHaveLength(6);
+    expect(approveBody.state.notifications.filter((event) => event.eventType === "ACCOUNT_MERGE_APPROVED")).toHaveLength(4);
+    expect(sentMessages).toEqual([
+      "merge-target@example.test",
+      "merge-requester@example.test",
+      "merge-target@example.test"
+    ]);
   });
 });
