@@ -20,6 +20,11 @@ import {
   type ReviewScenarioId,
   type ReviewState
 } from "./mvp1-review-scenarios.js";
+import {
+  createAccountMergeApprovedNotifications,
+  createAccountMergeRequestedNotifications,
+  type EmailSender
+} from "./review-notifications.js";
 import type {
   KakaoAuthProfile,
   KakaoOAuthClient,
@@ -38,6 +43,7 @@ interface ReviewHandlerOptions {
   persistence?: ReviewPersistence;
   kakaoConfig?: Partial<KakaoOAuthConfig>;
   kakaoOAuth?: KakaoOAuthClient;
+  emailSender?: EmailSender;
 }
 
 const DEFAULT_PORT = 4173;
@@ -60,6 +66,7 @@ export function createReviewRequestHandler(
   let initialized = false;
   const sessions = new Map<string, string>();
   const kakaoStates = new Set<string>();
+  const emailSender = options.emailSender ?? createMissingEmailSender();
 
   async function ensureInitialized() {
     if (!initialized) {
@@ -360,9 +367,19 @@ export function createReviewRequestHandler(
       }
 
       if (result.mergeRequest) {
+        const targetUser = state.users.find((user) => user.userUuid === result.mergeRequest!.targetUserUuid);
+        const notifications = targetUser
+          ? await createAccountMergeRequestedNotifications({
+              mergeRequest: result.mergeRequest,
+              requestUser: currentUser,
+              targetUser,
+              sender: emailSender
+            })
+          : [];
         state = {
           ...state,
           mergeRequests: [...state.mergeRequests, result.mergeRequest],
+          notifications: [...state.notifications, ...notifications],
           testCases: markPassed(state, "MVP1-AUTH-T011", "MVP1-AUTH-T014")
         };
         state = options.persistence ? await options.persistence.persist(state) : state;
@@ -396,9 +413,16 @@ export function createReviewRequestHandler(
       if (!result.ok) {
         return jsonResponse({ ok: false, error: result.error, state }, 409);
       }
+      const notifications = await createAccountMergeApprovedNotifications({
+        mergeRequest,
+        requestUser,
+        targetUser,
+        sender: emailSender
+      });
       state = {
         ...state,
         currentUserUuid: requestUser.userUuid,
+        notifications: [...state.notifications, ...notifications],
         testCases: markPassed(state, "MVP1-AUTH-T012")
       };
       state = options.persistence ? await options.persistence.persist(state) : state;
@@ -515,6 +539,14 @@ function markPassed(state: ReviewState, ...ids: Array<`MVP1-AUTH-T${string}`>) {
   return state.testCases.map((testCase) =>
     ids.includes(testCase.id) ? { ...testCase, status: "passed" as const } : testCase
   );
+}
+
+function createMissingEmailSender(): EmailSender {
+  return {
+    send: async () => {
+      throw new Error("EMAIL_SENDER_NOT_CONFIGURED");
+    }
+  };
 }
 
 function kakaoConfigStatus(options: ReviewHandlerOptions) {

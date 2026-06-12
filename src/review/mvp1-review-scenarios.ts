@@ -16,6 +16,7 @@ import {
   type AuthProvider,
   type AuthUser
 } from "../domains/auth/auth-domain.js";
+import type { ReviewNotificationEvent } from "./review-notifications.js";
 
 export type ReviewTestStatus = "pending" | "passed" | "failed";
 export type ReviewScenarioId =
@@ -46,6 +47,7 @@ export interface ReviewState {
   mergeRequests: AccountMergeRequest[];
   testCases: ReviewTestCase[];
   messages: string[];
+  notifications: ReviewNotificationEvent[];
   database?: {
     mode: "memory" | "database";
     connected: boolean;
@@ -82,6 +84,7 @@ export function createInitialReviewState(): ReviewState {
     users: [],
     mergeRequests: [],
     testCases: listReviewTestCases(),
+    notifications: [],
     messages: ["검수 상태가 초기화되었습니다."]
   };
 }
@@ -104,6 +107,7 @@ function cloneReviewState(state: ReviewState): ReviewState {
     currentUserUuid: state.currentUserUuid,
     mergeRequests: [...state.mergeRequests],
     testCases: state.testCases.map((testCase) => ({ ...testCase })),
+    notifications: state.notifications.map((notification) => ({ ...notification })),
     messages: [...state.messages]
   };
 }

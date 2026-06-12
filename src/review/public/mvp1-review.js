@@ -13,9 +13,11 @@ const elements = {
   metricDbUsers: document.querySelector("#metric-db-users"),
   metricDbIdentities: document.querySelector("#metric-db-identities"),
   metricDbAudit: document.querySelector("#metric-db-audit"),
+  metricNotifications: document.querySelector("#metric-notifications"),
   apiResult: document.querySelector("#api-result"),
   kakaoConfigStatus: document.querySelector("#kakao-config-status"),
   messageList: document.querySelector("#message-list"),
+  notificationList: document.querySelector("#notification-list"),
   auditList: document.querySelector("#audit-list"),
   accountList: document.querySelector("#account-list"),
   testCaseList: document.querySelector("#test-case-list")
@@ -231,6 +233,7 @@ function renderState(reviewState) {
   state.reviewState = reviewState;
   const users = Array.isArray(reviewState.users) ? reviewState.users : [];
   const mergeRequests = Array.isArray(reviewState.mergeRequests) ? reviewState.mergeRequests : [];
+  const notifications = Array.isArray(reviewState.notifications) ? reviewState.notifications : [];
   const testCases = Array.isArray(reviewState.testCases) ? reviewState.testCases : [];
   const currentUser = users.find((user) => user.userUuid === reviewState.currentUserUuid);
   const identityCount = users.reduce((sum, user) => sum + safeArray(user.identities).length, 0);
@@ -252,8 +255,10 @@ function renderState(reviewState) {
   setText(elements.metricDbUsers, String(reviewState.database?.userRows ?? 0));
   setText(elements.metricDbIdentities, String(reviewState.database?.identityRows ?? 0));
   setText(elements.metricDbAudit, String(reviewState.database?.auditLogRows ?? 0));
+  setText(elements.metricNotifications, String(notifications.length));
 
   renderMessages(reviewState.messages ?? []);
+  renderNotifications(notifications);
   renderAuditLogs(auditLogs);
   renderAccounts(users, mergeRequests);
   renderTestCases(testCases);
@@ -296,6 +301,18 @@ function renderAuditLogs(auditLogs) {
   }
 }
 
+function renderNotifications(notifications) {
+  clear(elements.notificationList);
+  for (const notification of notifications.slice(-8).reverse()) {
+    const item = document.createElement("li");
+    item.className = `notification-${notification.status}`;
+    item.textContent =
+      `${notification.eventType} / ${notification.channel} / ${notification.status} / ` +
+      `${notification.recipientEmail}`;
+    elements.notificationList?.append(item);
+  }
+}
+
 function renderAccounts(users, mergeRequests) {
   clear(elements.accountList);
   for (const user of users) {
@@ -326,6 +343,7 @@ function renderAccounts(users, mergeRequests) {
     appendDetail(details, "상태", mergeRequest.status);
     appendDetail(details, "요청 계정", mergeRequest.requestUserUuid);
     appendDetail(details, "대상 계정", mergeRequest.targetUserUuid);
+    appendDetail(details, "제공자 식별자", maskProviderUserId(mergeRequest.providerUserId));
     appendDetail(details, "만료", new Date(mergeRequest.expiresAt).toLocaleString());
 
     item.append(title, details);
@@ -370,6 +388,14 @@ function statusLabel(status) {
 
 function safeArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function maskProviderUserId(value) {
+  const text = String(value ?? "");
+  if (text.length <= 6) {
+    return text ? "***" : "없음";
+  }
+  return `${text.slice(0, 3)}***${text.slice(-3)}`;
 }
 
 function setText(element, text) {
