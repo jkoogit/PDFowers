@@ -30,7 +30,9 @@ PDFowers MVP1 검수 서버를 Cloudtype에서 stg와 prd 환경으로 분리 �
 | `PORT` | `4173` | `4173` | 아니오 |
 | `DATABASE_URL` | Cloudtype 시크릿 | Cloudtype 시크릿 | 예 |
 | `KAKAO_REST_API_KEY` | stg REST API 키 | prd REST API 키 | 아니오 |
-| `KAKAO_REDIRECT_URI` | stg callback URL | prd callback URL | 아니오 |
+| `APP_BASE_URL` | stg 공개 도메인 | prd 공개 도메인 | 아니오 |
+| `KAKAO_REDIRECT_PATH` | `/auth/kakao/callback` | `/auth/kakao/callback` | 아니오 |
+| `KAKAO_REDIRECT_URI` | 명시 override 필요 시만 사용 | 명시 override 필요 시만 사용 | 아니오 |
 | `KAKAO_CLIENT_SECRET` | Cloudtype 시크릿 | Cloudtype 시크릿 | 예 |
 | `KAKAO_SCOPE` | 빈 값 또는 `account_email,profile_nickname` | 빈 값 또는 `account_email,profile_nickname` | 아니오 |
 | `SMTP_HOST` | SMTP 서버 호스트 | SMTP 서버 호스트 | 아니오 |
