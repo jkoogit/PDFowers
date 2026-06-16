@@ -11,6 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "review:mvp1": "tsc --outDir dist && node dist/src/review/mvp1-review-runner.js",
+    "review:kakao-smoke": "tsc --outDir dist && node dist/src/review/kakao-smoke-check.js",
     "typecheck": "tsc --noEmit"
   },
   "engines": {

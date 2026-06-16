@@ -25,6 +25,8 @@ export interface KakaoOAuthClient {
   fetchUserProfile(accessToken: string): Promise<KakaoAuthProfile>;
 }
 
+const DEFAULT_KAKAO_REQUEST_TIMEOUT_MS = 8000;
+
 interface KakaoTokenResponse {
   access_token?: string;
   refresh_token?: string;
@@ -74,7 +76,8 @@ export function createKakaoOAuthClient(
 export async function exchangeKakaoCode(
   config: KakaoOAuthConfig,
   code: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = DEFAULT_KAKAO_REQUEST_TIMEOUT_MS
 ): Promise<KakaoToken> {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
@@ -86,11 +89,16 @@ export async function exchangeKakaoCode(
     body.set("client_secret", config.clientSecret);
   }
 
-  const response = await fetchImpl("https://kauth.kakao.com/oauth/token", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded;charset=utf-8" },
-    body
-  });
+  const response = await fetchWithTimeout(
+    () =>
+      fetchImpl("https://kauth.kakao.com/oauth/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded;charset=utf-8" },
+        body
+      }),
+    timeoutMs,
+    "KAKAO_TOKEN_REQUEST_TIMEOUT"
+  );
   const payload = (await response.json()) as KakaoTokenResponse;
   if (!response.ok || !payload.access_token) {
     throw new Error(payload.error_description ?? payload.error ?? "KAKAO_TOKEN_EXCHANGE_FAILED");
@@ -106,18 +114,44 @@ export async function exchangeKakaoCode(
 
 export async function fetchKakaoUserProfile(
   accessToken: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = DEFAULT_KAKAO_REQUEST_TIMEOUT_MS
 ): Promise<KakaoAuthProfile> {
-  const response = await fetchImpl("https://kapi.kakao.com/v2/user/me", {
-    method: "GET",
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
+  const response = await fetchWithTimeout(
+    () =>
+      fetchImpl("https://kapi.kakao.com/v2/user/me", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${accessToken}` }
+      }),
+    timeoutMs,
+    "KAKAO_PROFILE_REQUEST_TIMEOUT"
+  );
   const payload = (await response.json()) as KakaoUserResponse;
   if (!response.ok || payload.id === undefined || payload.id === null) {
     throw new Error("KAKAO_USER_PROFILE_FAILED");
   }
 
   return normalizeKakaoProfile(payload);
+}
+
+async function fetchWithTimeout(
+  work: () => Promise<Response>,
+  timeoutMs: number,
+  timeoutMessage: string
+) {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work(),
+      new Promise<Response>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 export function normalizeKakaoProfile(profile: KakaoUserResponse): KakaoAuthProfile {
