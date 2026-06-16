@@ -4,6 +4,11 @@ const DEFAULT_KAKAO_REDIRECT_PATH = "/auth/kakao/callback";
 
 type Env = Record<string, string | undefined>;
 
+export interface KakaoRedirectPolicy {
+  mode: "fixed" | "request-host";
+  allowedOrigins: string[];
+}
+
 export function createKakaoConfigFromEnv(env: Env = process.env): KakaoOAuthConfig | undefined {
   if (!env.KAKAO_REST_API_KEY) {
     return undefined;
@@ -20,6 +25,22 @@ export function createKakaoConfigFromEnv(env: Env = process.env): KakaoOAuthConf
     clientSecret: env.KAKAO_CLIENT_SECRET,
     scope: env.KAKAO_SCOPE
   };
+}
+
+export function createKakaoRedirectPolicyFromEnv(env: Env = process.env): KakaoRedirectPolicy {
+  if (env.APP_ENV !== "dev") {
+    return { mode: "fixed", allowedOrigins: [] };
+  }
+
+  const allowedOrigins = (env.KAKAO_ALLOWED_REDIRECT_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map(normalizeOrigin);
+
+  return allowedOrigins.length > 0
+    ? { mode: "request-host", allowedOrigins }
+    : { mode: "fixed", allowedOrigins: [] };
 }
 
 function resolveKakaoRedirectUri(env: Env) {
