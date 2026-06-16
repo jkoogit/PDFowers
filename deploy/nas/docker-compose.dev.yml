@@ -24,3 +24,11 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "node dist/src/review/kakao-smoke-check.js --base-url http://127.0.0.1:4173"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s

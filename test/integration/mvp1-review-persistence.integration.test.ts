@@ -4,9 +4,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { Pool, type PoolClient } from "pg";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { normalizePostgresUrl } from "../../src/db/database-url.js";
-import { createInitialReviewState, runReviewScenario } from "../../src/review/mvp1-review-scenarios.js";
+import { createInitialReviewState, type ReviewState } from "../../src/review/mvp1-review-scenarios.js";
 import { createPostgresReviewPersistence } from "../../src/review/mvp1-review-persistence.js";
 import { createReviewRequestHandler } from "../../src/review/mvp1-review-server.js";
+import type { KakaoOAuthClient } from "../../src/review/kakao-oauth.js";
 
 const rawConnectionString = process.env.DATABASE_URL;
 const connectionString = rawConnectionString ? normalizePostgresUrl(rawConnectionString) : undefined;
@@ -37,29 +38,46 @@ describeDb("MVP1 검수 persistence PostgreSQL 통합 테스트", () => {
   });
 
   test("검수 회원가입 시나리오 결과를 실제 user_account와 audit_log에 저장한다", async () => {
-    const persistence = createPostgresReviewPersistence(db);
-    let state = await persistence.initialize(createInitialReviewState());
-
-    state = runReviewScenario(state, "local-signup").state;
-    state = await persistence.persist(state);
+    const handler = createReviewRequestHandler(createInitialReviewState(), {
+      persistence: createPostgresReviewPersistence(db)
+    });
+    const loginId = `local-it-${randomUUID()}`;
+    const signup = await handler(
+      new Request("http://localhost/auth/signup/local", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          loginId,
+          email: `${loginId}@example.test`,
+          password: "correct-password",
+          displayName: "Local Integration User",
+          emailVerified: true
+        })
+      })
+    );
+    const signupBody = (await signup.json()) as {
+      user: { userUuid: string; loginId: string };
+      state: ReviewState;
+    };
 
     const { rows: userRows } = await client.query(
       "select login_id from local_credential where user_uuid = $1",
-      [state.users[0]!.userUuid]
+      [signupBody.user.userUuid]
     );
     const { rows: auditRows } = await client.query(
       "select audit_event_type_cd from audit_log where actor_user_uuid = $1",
-      [state.users[0]!.userUuid]
+      [signupBody.user.userUuid]
     );
 
-    expect(userRows).toEqual([{ login_id: state.users[0]!.loginId }]);
+    expect(signup.status).toBe(200);
+    expect(userRows).toEqual([{ login_id: signupBody.user.loginId }]);
     expect(auditRows).toEqual([{ audit_event_type_cd: "LOCAL_USER_CREATED" }]);
-    expect(state.database).toMatchObject({
+    expect(signupBody.state.database).toMatchObject({
       mode: "database",
       connected: true
     });
-    expect(state.database!.userRows).toBeGreaterThanOrEqual(1);
-    expect(state.database!.auditLogRows).toBeGreaterThanOrEqual(1);
+    expect(signupBody.state.database!.userRows).toBeGreaterThanOrEqual(1);
+    expect(signupBody.state.database!.auditLogRows).toBeGreaterThanOrEqual(1);
   });
 
   test("실제형 인증 API 흐름이 PostgreSQL user, identity, merge request에 반영된다", async () => {
@@ -141,4 +159,75 @@ describeDb("MVP1 검수 persistence PostgreSQL 통합 테스트", () => {
     expect(mergeRows).toEqual([{ merge_status_cd: "approved" }]);
     expect(targetRows).toEqual([{ user_status_cd: "merged" }]);
   });
+
+  test("PostgreSQL에 저장된 Kakao identity를 새 핸들러가 재로그인에 사용한다", async () => {
+    const providerUserId = `it-kakao-${randomUUID()}`;
+    const kakaoOAuth = createFakeKakaoOAuthClient(providerUserId);
+
+    const firstHandler = createReviewRequestHandler(createInitialReviewState(), {
+      persistence: createPostgresReviewPersistence(db),
+      kakaoConfig: {
+        restApiKey: "test-rest-api-key",
+        redirectUri: "http://localhost:4173/auth/kakao/callback"
+      },
+      kakaoOAuth
+    });
+
+    const firstLogin = await performKakaoLogin(firstHandler);
+    expect(firstLogin.status).toBe(200);
+
+    const secondHandler = createReviewRequestHandler(createInitialReviewState(), {
+      persistence: createPostgresReviewPersistence(db),
+      kakaoConfig: {
+        restApiKey: "test-rest-api-key",
+        redirectUri: "http://localhost:4173/auth/kakao/callback"
+      },
+      kakaoOAuth
+    });
+
+    const secondLogin = await performKakaoLogin(secondHandler);
+    const secondBody = (await secondLogin.json()) as {
+      ok: boolean;
+      state: { users: Array<{ loginId: string }> };
+    };
+
+    const { rows: credentialRows } = await client.query(
+      "select login_id from local_credential where login_id = $1",
+      [`kakao-${providerUserId}`]
+    );
+    const { rows: identityRows } = await client.query(
+      "select provider_user_id from auth_identity where provider_cd = 'kakao' and provider_user_id = $1",
+      [providerUserId]
+    );
+
+    expect(secondLogin.status).toBe(200);
+    expect(secondBody.ok).toBe(true);
+    expect(secondBody.state.users.filter((user) => user.loginId === `kakao-${providerUserId}`)).toHaveLength(1);
+    expect(credentialRows).toEqual([{ login_id: `kakao-${providerUserId}` }]);
+    expect(identityRows).toEqual([{ provider_user_id: providerUserId }]);
+  });
 });
+
+function createFakeKakaoOAuthClient(providerUserId: string): KakaoOAuthClient {
+  return {
+    buildAuthorizeUrl: (state) => new URL(`https://kauth.kakao.test/oauth/authorize?state=${state}`),
+    exchangeCode: async () => ({ accessToken: "fake-access-token" }),
+    fetchUserProfile: async () => ({
+      provider: "kakao",
+      providerUserId,
+      displayName: `Kakao ${providerUserId}`
+    })
+  };
+}
+
+async function performKakaoLogin(handler: (request: Request) => Promise<Response>) {
+  const start = await handler(new Request("http://localhost:4173/auth/kakao/start"));
+  const cookie = start.headers.get("set-cookie") ?? "";
+  const state = new URL(start.headers.get("location") ?? "").searchParams.get("state");
+
+  return handler(
+    new Request(`http://localhost:4173/auth/kakao/callback?code=fake-code&state=${state}`, {
+      headers: { cookie }
+    })
+  );
+}

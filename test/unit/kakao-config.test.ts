@@ -5,12 +5,12 @@ describe("Kakao config env", () => {
   test("APP_BASE_URL과 기본 callback path로 redirect URI를 만든다", () => {
     const config = createKakaoConfigFromEnv({
       KAKAO_REST_API_KEY: "rest-api-key",
-      APP_BASE_URL: "https://jkok2.myqnapcloud.com"
+      APP_BASE_URL: "https://jkok2.myqnapcloud.com:4443"
     });
 
     expect(config).toMatchObject({
       restApiKey: "rest-api-key",
-      redirectUri: "https://jkok2.myqnapcloud.com/auth/kakao/callback"
+      redirectUri: "https://jkok2.myqnapcloud.com:4443/auth/kakao/callback"
     });
   });
 
