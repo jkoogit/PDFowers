@@ -22,6 +22,7 @@
 | `04_동기화학습.md` | WebSocket, 오프라인 큐, 충돌 해결 |
 | `05_인증학습.md` | OAuth, 이메일 인증, 계정 연결 |
 | `06_QNAP_NginxProxyManager_도메인연결학습.md` | QNAP NAS Docker Station의 dev 서비스 도메인/HTTPS 연결과 Nginx Proxy Manager 적용 |
+| `07_NAS_내부망_도메인과_Kakao_로그인.md` | NAS 내부망 hairpin NAT, split DNS, Kakao Redirect URI 검증 기준 |
 
 ## 초기화 기준
 

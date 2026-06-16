@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   buildKakaoAuthorizeUrl,
   createKakaoOAuthClient,
+  exchangeKakaoCode,
   normalizeKakaoProfile,
   type KakaoOAuthConfig
 } from "../../src/review/kakao-oauth.js";
@@ -75,5 +76,14 @@ describe("Kakao OAuth client", () => {
       emailFromProvider: undefined,
       displayName: "Kakao 999"
     });
+  });
+  test("token API 응답이 지연되면 지정 시간 안에 timeout 오류를 반환한다", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(
+      () => new Promise<Response>(() => undefined)
+    );
+
+    await expect(exchangeKakaoCode(config, "authorization-code", fetchMock, 1)).rejects.toThrow(
+      "KAKAO_TOKEN_REQUEST_TIMEOUT"
+    );
   });
 });
