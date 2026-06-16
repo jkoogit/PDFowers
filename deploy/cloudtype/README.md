@@ -66,3 +66,12 @@ Cloudtype에서 one-off command가 제한되면 운영자 PC 또는 NAS에서 �
 - Cloudtype 도메인 연결 후 카카오 콘솔의 REST API 키 설정 화면에 Redirect URI를 등록한다.
 - Client Secret은 stg/prd 모두 ON을 기본으로 한다.
 - OAuth access token과 refresh token은 MVP1에서 저장하지 않는다.
+## 2026-06-17 Kakao smoke check
+
+stg 배포 후에는 다음 명령으로 카카오 로그인 화면 이동 가능 상태를 확인한다.
+
+```powershell
+npm run review:kakao-smoke -- --base-url https://fowersstg.pdfrend.com
+```
+
+이 검사는 `/auth/kakao/config-status`가 `enabled=true`인지, `/auth/kakao/start`가 `https://kauth.kakao.com/oauth/authorize`로 3xx redirect를 반환하는지만 확인한다. 실제 카카오 계정 인증 완료는 브라우저 수동 검증으로 진행한다.

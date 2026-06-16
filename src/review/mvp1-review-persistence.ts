@@ -1,7 +1,15 @@
 import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { ensureAuthSchema } from "../domains/auth/auth-repository.js";
-import type { AuditLog } from "../domains/auth/auth-domain.js";
+import type {
+  AccountMergeRequest,
+  AuditLog,
+  AuthIdentity,
+  AuthProvider,
+  AuthUser,
+  UserStatus,
+  VerifiedEmail
+} from "../domains/auth/auth-domain.js";
 import type { ReviewPersistence } from "./mvp1-review-server.js";
 import type { ReviewState } from "./mvp1-review-scenarios.js";
 
@@ -13,7 +21,8 @@ export function createPostgresReviewPersistence(db: ReviewDatabase): ReviewPersi
   return {
     async initialize(state) {
       await ensureAuthSchema(db);
-      return summarizeDatabase(db, state, { connected: true });
+      const hydratedState = await hydratePersistedState(db, state);
+      return summarizeDatabase(db, hydratedState, { connected: true });
     },
     async persist(state) {
       await ensureAuthSchema(db);
@@ -28,6 +37,139 @@ export function createPostgresReviewPersistence(db: ReviewDatabase): ReviewPersi
       return summarizeDatabase(db, state, { connected: true });
     }
   };
+}
+
+async function hydratePersistedState(
+  db: ReviewDatabase,
+  state: ReviewState
+): Promise<ReviewState> {
+  const users = await loadPersistedUsers(db);
+  if (users.length === 0) {
+    return state;
+  }
+
+  const mergeRequests = await loadPersistedMergeRequests(db);
+  const loadedUserUuids = new Set(users.map((user) => user.userUuid));
+
+  return {
+    ...state,
+    users,
+    currentUserUuid: state.currentUserUuid && loadedUserUuids.has(state.currentUserUuid)
+      ? state.currentUserUuid
+      : undefined,
+    mergeRequests
+  };
+}
+
+async function loadPersistedUsers(db: ReviewDatabase): Promise<AuthUser[]> {
+  const userResult = await db.execute(sql`
+    select
+      ua.user_uuid,
+      lc.login_id,
+      ua.primary_email,
+      lc.password_hash,
+      ua.display_name,
+      ua.user_status_cd,
+      ua.merged_into_user_uuid
+    from user_account ua
+    join local_credential lc on lc.user_uuid = ua.user_uuid
+    order by ua.created_at, ua.user_uuid
+  `);
+  const usersByUuid = new Map<string, AuthUser>();
+
+  for (const row of rowsOf<PersistedUserRow>(userResult)) {
+    usersByUuid.set(row.user_uuid, {
+      userUuid: row.user_uuid,
+      loginId: row.login_id,
+      primaryEmail: row.primary_email,
+      passwordHash: row.password_hash,
+      displayName: row.display_name,
+      status: row.user_status_cd as UserStatus,
+      mergedIntoUserUuid: row.merged_into_user_uuid ?? undefined,
+      identities: [],
+      verifiedEmails: [],
+      auditLogs: []
+    });
+  }
+
+  if (usersByUuid.size === 0) {
+    return [];
+  }
+
+  const emailResult = await db.execute(sql`
+    select
+      user_uuid,
+      email,
+      email_verified_at,
+      email_notification_opt_in
+    from verified_email
+    order by created_at, email
+  `);
+  for (const row of rowsOf<PersistedEmailRow>(emailResult)) {
+    const user = usersByUuid.get(row.user_uuid);
+    if (user) {
+      user.verifiedEmails.push(toVerifiedEmail(row));
+    }
+  }
+
+  const identityResult = await db.execute(sql`
+    select
+      user_uuid,
+      provider_cd,
+      provider_user_id,
+      email_from_provider,
+      connected_at,
+      last_login_at
+    from auth_identity
+    order by created_at, provider_cd, provider_user_id
+  `);
+  for (const row of rowsOf<PersistedIdentityRow>(identityResult)) {
+    const user = usersByUuid.get(row.user_uuid);
+    if (user) {
+      user.identities.push(toAuthIdentity(row));
+    }
+  }
+
+  for (const user of usersByUuid.values()) {
+    if (user.verifiedEmails.length === 0) {
+      user.verifiedEmails.push({
+        email: user.primaryEmail,
+        emailVerifiedAt: null,
+        emailNotificationOptIn: false
+      });
+    }
+  }
+
+  return [...usersByUuid.values()];
+}
+
+async function loadPersistedMergeRequests(db: ReviewDatabase): Promise<AccountMergeRequest[]> {
+  const result = await db.execute(sql`
+    select
+      merge_request_uuid,
+      request_user_uuid,
+      target_user_uuid,
+      provider_cd,
+      provider_user_id,
+      merge_status_cd,
+      expires_at,
+      approved_at,
+      cancelled_at
+    from account_merge_request
+    order by created_at, merge_request_uuid
+  `);
+
+  return rowsOf<PersistedMergeRequestRow>(result).map((row) => ({
+    mergeRequestUuid: row.merge_request_uuid,
+    requestUserUuid: row.request_user_uuid,
+    targetUserUuid: row.target_user_uuid,
+    provider: row.provider_cd as AuthProvider,
+    providerUserId: row.provider_user_id,
+    status: row.merge_status_cd,
+    expiresAt: toDate(row.expires_at),
+    approvedAt: row.approved_at ? toDate(row.approved_at) : undefined,
+    cancelledAt: row.cancelled_at ? toDate(row.cancelled_at) : undefined
+  }));
 }
 
 export function createMemoryReviewPersistence(): ReviewPersistence {
@@ -158,6 +300,70 @@ async function persistUsers(
 
     await persistAuditLogs(db, user.userUuid, user.auditLogs, auditOffsets);
   }
+}
+
+interface PersistedUserRow {
+  user_uuid: string;
+  login_id: string;
+  primary_email: string;
+  password_hash: string;
+  display_name: string;
+  user_status_cd: string;
+  merged_into_user_uuid: string | null;
+}
+
+interface PersistedEmailRow {
+  user_uuid: string;
+  email: string;
+  email_verified_at: Date | string | null;
+  email_notification_opt_in: boolean;
+}
+
+interface PersistedIdentityRow {
+  user_uuid: string;
+  provider_cd: string;
+  provider_user_id: string;
+  email_from_provider: string | null;
+  connected_at: Date | string;
+  last_login_at: Date | string | null;
+}
+
+interface PersistedMergeRequestRow {
+  merge_request_uuid: string;
+  request_user_uuid: string;
+  target_user_uuid: string;
+  provider_cd: AuthProvider;
+  provider_user_id: string;
+  merge_status_cd: AccountMergeRequest["status"];
+  expires_at: Date | string;
+  approved_at: Date | string | null;
+  cancelled_at: Date | string | null;
+}
+
+function rowsOf<T>(result: unknown): T[] {
+  return ((result as { rows?: T[] }).rows ?? []) as T[];
+}
+
+function toVerifiedEmail(row: PersistedEmailRow): VerifiedEmail {
+  return {
+    email: row.email,
+    emailVerifiedAt: row.email_verified_at ? toDate(row.email_verified_at) : null,
+    emailNotificationOptIn: row.email_notification_opt_in
+  };
+}
+
+function toAuthIdentity(row: PersistedIdentityRow): AuthIdentity {
+  return {
+    provider: row.provider_cd as AuthProvider,
+    providerUserId: row.provider_user_id,
+    emailFromProvider: row.email_from_provider ?? undefined,
+    connectedAt: toDate(row.connected_at),
+    lastLoginAt: row.last_login_at ? toDate(row.last_login_at) : undefined
+  };
+}
+
+function toDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
 }
 
 async function persistAuditLogs(
