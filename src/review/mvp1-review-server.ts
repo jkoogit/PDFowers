@@ -25,11 +25,13 @@ import {
   createAccountMergeRequestedNotifications,
   type EmailSender
 } from "./review-notifications.js";
+import { createKakaoOAuthClient } from "./kakao-oauth.js";
 import type {
   KakaoAuthProfile,
   KakaoOAuthClient,
   KakaoOAuthConfig
 } from "./kakao-oauth.js";
+import type { KakaoRedirectPolicy } from "./kakao-config.js";
 
 type ReviewRequestHandler = (request: Request) => Promise<Response>;
 
@@ -43,6 +45,8 @@ interface ReviewHandlerOptions {
   persistence?: ReviewPersistence;
   kakaoConfig?: Partial<KakaoOAuthConfig>;
   kakaoOAuth?: KakaoOAuthClient;
+  kakaoOAuthFactory?: (config: KakaoOAuthConfig) => KakaoOAuthClient;
+  kakaoRedirectPolicy?: KakaoRedirectPolicy;
   emailSender?: EmailSender;
 }
 
@@ -65,7 +69,7 @@ export function createReviewRequestHandler(
   let state: ReviewState = initialState;
   let initialized = false;
   const sessions = new Map<string, string>();
-  const kakaoStates = new Set<string>();
+  const kakaoStates = new Map<string, KakaoOAuthClient>();
   const emailSender = options.emailSender ?? createMissingEmailSender();
 
   async function ensureInitialized() {
@@ -204,7 +208,8 @@ export function createReviewRequestHandler(
 
     if (request.method === "GET" && url.pathname === "/auth/kakao/start") {
       const status = kakaoConfigStatus(options);
-      if (!status.enabled || !options.kakaoOAuth) {
+      const kakaoOAuth = createKakaoOAuthForRequest(request, options);
+      if (!status.enabled || !kakaoOAuth) {
         return jsonResponse(
           { ok: false, error: "KAKAO_OAUTH_NOT_CONFIGURED", ...status },
           503
@@ -212,8 +217,8 @@ export function createReviewRequestHandler(
       }
 
       const oauthState = randomUUID();
-      kakaoStates.add(oauthState);
-      const authorizeUrl = options.kakaoOAuth.buildAuthorizeUrl(oauthState);
+      kakaoStates.set(oauthState, kakaoOAuth);
+      const authorizeUrl = kakaoOAuth.buildAuthorizeUrl(oauthState);
       return new Response(null, {
         status: 302,
         headers: {
@@ -224,37 +229,35 @@ export function createReviewRequestHandler(
     }
 
     if (request.method === "GET" && url.pathname === "/auth/kakao/callback") {
-      if (!options.kakaoOAuth) {
+      const status = kakaoConfigStatus(options);
+      if (!status.enabled) {
         return jsonResponse({ ok: false, error: "KAKAO_OAUTH_NOT_CONFIGURED" }, 503);
       }
       const code = url.searchParams.get("code");
       const oauthState = url.searchParams.get("state");
       const storedState = parseCookie(request.headers.get("cookie") ?? "")["pdfowers_kakao_state"];
       if (!code) {
-        return jsonResponse({ ok: false, error: "KAKAO_OAUTH_CODE_REQUIRED" }, 400);
+        return redirectToReviewWithKakaoError("KAKAO_OAUTH_CODE_REQUIRED");
       }
-      if (!oauthState || !storedState || oauthState !== storedState || !kakaoStates.has(oauthState)) {
-        return jsonResponse({ ok: false, error: "KAKAO_OAUTH_STATE_MISMATCH" }, 400);
+      const kakaoOAuth = oauthState ? kakaoStates.get(oauthState) : undefined;
+      if (!oauthState || !storedState || oauthState !== storedState || !kakaoOAuth) {
+        return redirectToReviewWithKakaoError("KAKAO_OAUTH_STATE_MISMATCH");
       }
       kakaoStates.delete(oauthState);
 
       try {
-        const token = await options.kakaoOAuth.exchangeCode(code);
-        const profile = await options.kakaoOAuth.fetchUserProfile(token.accessToken);
+        const token = await kakaoOAuth.exchangeCode(code);
+        const profile = await kakaoOAuth.fetchUserProfile(token.accessToken);
         const result = await signInWithKakaoProfile(profile, state, sessions, options.persistence);
         state = result.state;
-        return jsonResponse({ ok: true, user: publicUser(result.user), state }, 200, {
-          "set-cookie": sessionCookie(result.sessionId)
+        const headers = new Headers({
+          location: "/?kakao=success"
         });
+        headers.append("set-cookie", sessionCookie(result.sessionId));
+        headers.append("set-cookie", clearKakaoStateCookie());
+        return new Response(null, { status: 303, headers });
       } catch (error) {
-        return jsonResponse(
-          {
-            ok: false,
-            error: "KAKAO_OAUTH_CALLBACK_FAILED",
-            message: error instanceof Error ? error.message : "Kakao OAuth callback failed"
-          },
-          502
-        );
+        return redirectToReviewWithKakaoError("KAKAO_OAUTH_CALLBACK_FAILED");
       }
     }
 
@@ -465,8 +468,21 @@ async function handleNodeRequest(
     body
   });
   const webResponse = await handler(webRequest);
-  response.writeHead(webResponse.status, Object.fromEntries(webResponse.headers.entries()));
+  response.writeHead(webResponse.status, responseHeaders(webResponse.headers));
   response.end(Buffer.from(await webResponse.arrayBuffer()));
+}
+
+function responseHeaders(headers: Headers) {
+  const result: Record<string, string | string[]> = {};
+  for (const [key, value] of headers.entries()) {
+    result[key] = value;
+  }
+  const getSetCookie = (headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+  const setCookies = getSetCookie ? getSetCookie.call(headers) : [];
+  if (setCookies.length > 0) {
+    result["set-cookie"] = setCookies;
+  }
+  return result;
 }
 
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
@@ -496,6 +512,20 @@ function sessionCookie(sessionId: string) {
 
 function kakaoStateCookie(state: string) {
   return `pdfowers_kakao_state=${state}; Path=/auth/kakao; HttpOnly; SameSite=Lax`;
+}
+
+function clearKakaoStateCookie() {
+  return "pdfowers_kakao_state=; Path=/auth/kakao; HttpOnly; SameSite=Lax; Max-Age=0";
+}
+
+function redirectToReviewWithKakaoError(error: string) {
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: `/?kakao_error=${encodeURIComponent(error)}`,
+      "set-cookie": clearKakaoStateCookie()
+    }
+  });
 }
 
 function parseCookie(cookieHeader: string) {
@@ -549,6 +579,65 @@ function createMissingEmailSender(): EmailSender {
   };
 }
 
+function createKakaoOAuthForRequest(
+  request: Request,
+  options: ReviewHandlerOptions
+): KakaoOAuthClient | undefined {
+  if (options.kakaoRedirectPolicy?.mode !== "request-host") {
+    return options.kakaoOAuth;
+  }
+
+  const config = completeKakaoConfig(options.kakaoConfig);
+  if (!config) {
+    return undefined;
+  }
+
+  const origin = allowedRequestOrigin(request, options.kakaoRedirectPolicy.allowedOrigins);
+  if (!origin) {
+    return undefined;
+  }
+
+  const callbackPath = new URL(config.redirectUri).pathname;
+  const dynamicConfig = {
+    ...config,
+    redirectUri: new URL(callbackPath, origin).toString()
+  };
+  const factory = options.kakaoOAuthFactory ?? createKakaoOAuthClient;
+  return factory(dynamicConfig);
+}
+
+function completeKakaoConfig(config: Partial<KakaoOAuthConfig> | undefined): KakaoOAuthConfig | undefined {
+  if (!config?.restApiKey || !config.redirectUri) {
+    return undefined;
+  }
+
+  return {
+    restApiKey: config.restApiKey,
+    redirectUri: config.redirectUri,
+    clientSecret: config.clientSecret,
+    scope: config.scope
+  };
+}
+
+function allowedRequestOrigin(request: Request, allowedOrigins: string[]) {
+  const requestHosts = requestHostCandidates(request);
+  return allowedOrigins.find((origin) => requestHosts.has(new URL(origin).host.toLowerCase()));
+}
+
+function requestHostCandidates(request: Request) {
+  const url = new URL(request.url);
+  const hosts = new Set<string>([url.host.toLowerCase()]);
+  const host = request.headers.get("host");
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  if (host) {
+    hosts.add(host.toLowerCase());
+  }
+  if (forwardedHost) {
+    hosts.add(forwardedHost.toLowerCase());
+  }
+  return hosts;
+}
+
 function kakaoConfigStatus(options: ReviewHandlerOptions) {
   const missing = [];
   if (!options.kakaoConfig?.restApiKey) {
@@ -559,9 +648,10 @@ function kakaoConfigStatus(options: ReviewHandlerOptions) {
   }
 
   return {
-    enabled: missing.length === 0 && Boolean(options.kakaoOAuth),
+    enabled: missing.length === 0 && Boolean(options.kakaoOAuth ?? options.kakaoOAuthFactory),
     missing,
     redirectUri: options.kakaoConfig?.redirectUri ?? null,
+    redirectMode: options.kakaoRedirectPolicy?.mode ?? "fixed",
     scope: options.kakaoConfig?.scope ?? null,
     clientSecretConfigured: Boolean(options.kakaoConfig?.clientSecret)
   };

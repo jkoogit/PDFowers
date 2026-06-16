@@ -82,3 +82,23 @@ npm run review:kakao-smoke -- --base-url https://jkok2.myqnapcloud.com:4443
 | 작업일시 | 작업 에이전트 | 작성자 | 내용 요약 |
 | :--- | :--- | :--- | :--- |
 | 2026-06-17 00:10 KST | Codex | jkoogi | NAS 내부망 도메인과 Kakao Redirect URI 기준 정리 |
+
+## 2026-06-17 dev request-host callback 기준
+
+dev NAS에서는 `APP_ENV=dev`일 때만 요청 Host 기반 Kakao Redirect URI를 허용한다. 이 기준은 내부망 IP 직접 접속 검수를 지원하기 위한 dev 전용 동작이며, `stg`와 `prd`에서는 계속 `APP_BASE_URL` 기준 고정 Redirect URI를 사용한다.
+
+```dotenv
+APP_ENV=dev
+APP_BASE_URL=https://jkok2.myqnapcloud.com:4443
+KAKAO_REDIRECT_PATH=/auth/kakao/callback
+KAKAO_ALLOWED_REDIRECT_ORIGINS=http://localhost:4173,http://127.0.0.1:4173,http://192.168.219.112:4173,https://jkok2.myqnapcloud.com:4443
+```
+
+동작 기준은 다음과 같다.
+
+| 접속 URL | Kakao Redirect URI |
+| :--- | :--- |
+| `http://192.168.219.112:4173` | `http://192.168.219.112:4173/auth/kakao/callback` |
+| `https://jkok2.myqnapcloud.com:4443` | `https://jkok2.myqnapcloud.com:4443/auth/kakao/callback` |
+
+`http://127.0.0.1:4173`은 NAS 컨테이너 내부 healthcheck가 `/auth/kakao/start`를 확인할 때 사용한다. `KAKAO_ALLOWED_REDIRECT_ORIGINS`에 없는 Host는 request-host redirect 대상으로 사용하지 않는다. Kakao Developers REST API Redirect URI에는 브라우저에서 실제 로그인 검증에 사용할 callback URI를 등록한다.

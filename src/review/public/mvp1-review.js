@@ -23,6 +23,8 @@ const elements = {
   testCaseList: document.querySelector("#test-case-list")
 };
 
+renderKakaoCallbackResult();
+
 document.querySelector("#refresh-state")?.addEventListener("click", () => {
   void loadState();
 });
@@ -277,6 +279,29 @@ function renderKakaoConfigStatus(status) {
     elements.kakaoConfigStatus,
     `설정 필요: ${safeArray(status.missing).join(", ") || "Kakao OAuth client"}`
   );
+}
+
+function renderKakaoCallbackResult() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("kakao") === "success") {
+    setText(elements.apiResult, "Kakao login completed. Review state has been refreshed.");
+    clearKakaoCallbackQuery(params);
+    return;
+  }
+
+  const error = params.get("kakao_error");
+  if (error) {
+    setText(elements.apiResult, `Kakao login failed: ${error}`);
+    clearKakaoCallbackQuery(params);
+  }
+}
+
+function clearKakaoCallbackQuery(params) {
+  params.delete("kakao");
+  params.delete("kakao_error");
+  const query = params.toString();
+  const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+  window.history.replaceState({}, "", nextUrl);
 }
 
 function reviewPrefix() {
