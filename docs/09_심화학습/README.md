@@ -21,6 +21,7 @@
 | `03_PDF처리학습.md` | PDF.js, Annotation, OCR, 병합 방식 |
 | `04_동기화학습.md` | WebSocket, 오프라인 큐, 충돌 해결 |
 | `05_인증학습.md` | OAuth, 이메일 인증, 계정 연결 |
+| `06_QNAP_NginxProxyManager_도메인연결학습.md` | QNAP NAS Docker Station의 dev 서비스 도메인/HTTPS 연결과 Nginx Proxy Manager 적용 |
 
 ## 초기화 기준
 
@@ -37,3 +38,4 @@
 | 작업일시 | 작업 에이전트 | 작성자 | 내용 한 줄 요약 |
 | :--- | :--- | :--- | :--- |
 | 2026-06-08 02:20 KST | Codex | jkoogi | 문서 작업 이력 섹션 추가 |
+| 2026-06-14 KST | Codex | jkoogi | QNAP Nginx Proxy Manager 도메인 연결 학습 문서 링크 추가 |
