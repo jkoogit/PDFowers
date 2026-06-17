@@ -174,7 +174,7 @@ describeDb("MVP1 검수 persistence PostgreSQL 통합 테스트", () => {
     });
 
     const firstLogin = await performKakaoLogin(firstHandler);
-    expect(firstLogin.status).toBe(200);
+    expect(firstLogin.status).toBe(303);
 
     const secondHandler = createReviewRequestHandler(createInitialReviewState(), {
       persistence: createPostgresReviewPersistence(db),
@@ -186,9 +186,9 @@ describeDb("MVP1 검수 persistence PostgreSQL 통합 테스트", () => {
     });
 
     const secondLogin = await performKakaoLogin(secondHandler);
-    const secondBody = (await secondLogin.json()) as {
-      ok: boolean;
-      state: { users: Array<{ loginId: string }> };
+    const stateResponse = await secondHandler(new Request("http://localhost:4173/api/review/state"));
+    const stateBody = (await stateResponse.json()) as {
+      users: Array<{ loginId: string }>;
     };
 
     const { rows: credentialRows } = await client.query(
@@ -200,9 +200,9 @@ describeDb("MVP1 검수 persistence PostgreSQL 통합 테스트", () => {
       [providerUserId]
     );
 
-    expect(secondLogin.status).toBe(200);
-    expect(secondBody.ok).toBe(true);
-    expect(secondBody.state.users.filter((user) => user.loginId === `kakao-${providerUserId}`)).toHaveLength(1);
+    expect(secondLogin.status).toBe(303);
+    expect(stateResponse.status).toBe(200);
+    expect(stateBody.users.filter((user) => user.loginId === `kakao-${providerUserId}`)).toHaveLength(1);
     expect(credentialRows).toEqual([{ login_id: `kakao-${providerUserId}` }]);
     expect(identityRows).toEqual([{ provider_user_id: providerUserId }]);
   });
