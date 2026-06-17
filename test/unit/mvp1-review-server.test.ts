@@ -233,6 +233,12 @@ describe("MVP1 검수 서버", () => {
       mergeRequest: { mergeRequestUuid: string };
       state: {
         mergeRequests: unknown[];
+        mergeRequestReviewItems: Array<{
+          providerLabel: string;
+          statusLabel: string;
+          requestUserLabel: string;
+          targetUserLabel: string;
+        }>;
         notifications: Array<{
           eventType: string;
           channel: string;
@@ -245,6 +251,12 @@ describe("MVP1 검수 서버", () => {
     expect(conflictBody.error).toBe("ACCOUNT_MERGE_REQUIRED");
     expect(conflictBody.mergeRequest.mergeRequestUuid).toBeTruthy();
     expect(conflictBody.state.mergeRequests).toHaveLength(1);
+    expect(conflictBody.state.mergeRequestReviewItems[0]).toMatchObject({
+      providerLabel: "Google",
+      statusLabel: "승인 대기",
+      requestUserLabel: "병합 요청자 (merge-requester)",
+      targetUserLabel: "병합 대상 (merge-target)"
+    });
     expect(conflictBody.state.notifications).toHaveLength(2);
     expect(conflictBody.state.notifications[0]).toMatchObject({
       eventType: "ACCOUNT_MERGE_REQUESTED",

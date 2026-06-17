@@ -20,6 +20,7 @@ import {
   type ReviewScenarioId,
   type ReviewState
 } from "./mvp1-review-scenarios.js";
+import { createMergeRequestReviewItems } from "./mvp1-review-merge-ux.js";
 import {
   createAccountMergeApprovedNotifications,
   createAccountMergeRequestedNotifications,
@@ -85,14 +86,14 @@ export function createReviewRequestHandler(
 
     if (request.method === "GET" && url.pathname === "/api/review/state") {
       state = options.persistence ? await options.persistence.summarize(state) : state;
-      return jsonResponse(state);
+      return jsonResponse(publicReviewState(state));
     }
 
     if (request.method === "POST" && url.pathname === "/api/review/reset") {
       state = createInitialReviewState();
       initialized = false;
       await ensureInitialized();
-      return jsonResponse({ ok: true, state });
+      return jsonResponse({ ok: true, state: publicReviewState(state) });
     }
 
     if (request.method === "POST" && url.pathname.startsWith("/api/review/scenarios/")) {
@@ -100,7 +101,7 @@ export function createReviewRequestHandler(
       try {
         const result = runReviewScenario(state, scenarioId);
         state = options.persistence ? await options.persistence.persist(result.state) : result.state;
-        return jsonResponse({ ...result, state });
+        return jsonResponse({ ...result, state: publicReviewState(state) });
       } catch (error) {
         return jsonResponse(
           {
@@ -148,7 +149,7 @@ export function createReviewRequestHandler(
         {
           ok: true,
           user: publicUser(user),
-          state
+          state: publicReviewState(state)
         },
         200,
         { "set-cookie": sessionCookie(sessionId) }
@@ -171,7 +172,7 @@ export function createReviewRequestHandler(
       });
       if (!result.ok) {
         state = options.persistence ? await options.persistence.persist(state) : state;
-        return jsonResponse({ ok: false, error: result.error, state }, 401);
+        return jsonResponse({ ok: false, error: result.error, state: publicReviewState(state) }, 401);
       }
 
       state = {
@@ -197,7 +198,7 @@ export function createReviewRequestHandler(
       return jsonResponse({
         authenticated: Boolean(user),
         user: user ? publicUser(user) : null,
-        state
+        state: publicReviewState(state)
       });
     }
 
@@ -288,7 +289,7 @@ export function createReviewRequestHandler(
           testCases: markPassed(state, "MVP1-AUTH-T007", "MVP1-AUTH-T020")
         };
         state = options.persistence ? await options.persistence.persist(state) : state;
-        return jsonResponse({ ok: true, user: publicUser(user), state }, 200, {
+        return jsonResponse({ ok: true, user: publicUser(user), state: publicReviewState(state) }, 200, {
           "set-cookie": sessionCookie(sessionId)
         });
       }
@@ -314,7 +315,7 @@ export function createReviewRequestHandler(
       };
       const sessionId = createSession(sessions, user.userUuid);
       state = options.persistence ? await options.persistence.persist(state) : state;
-      return jsonResponse({ ok: true, user: publicUser(user), state }, 200, {
+      return jsonResponse({ ok: true, user: publicUser(user), state: publicReviewState(state) }, 200, {
         "set-cookie": sessionCookie(sessionId)
       });
     }
@@ -335,14 +336,14 @@ export function createReviewRequestHandler(
       if (request.method === "DELETE") {
         const result = unlinkOAuthIdentity({ user: currentUser, provider });
         if (!result.ok) {
-          return jsonResponse({ ok: false, error: result.error, state }, 409);
+          return jsonResponse({ ok: false, error: result.error, state: publicReviewState(state) }, 409);
         }
         state = {
           ...state,
           testCases: markPassed(state, "MVP1-AUTH-T015")
         };
         state = options.persistence ? await options.persistence.persist(state) : state;
-        return jsonResponse({ ok: true, user: publicUser(currentUser), state });
+        return jsonResponse({ ok: true, user: publicUser(currentUser), state: publicReviewState(state) });
       }
 
       const payload = await readJsonBody<{
@@ -366,7 +367,7 @@ export function createReviewRequestHandler(
           testCases: markPassed(state, "MVP1-AUTH-T009")
         };
         state = options.persistence ? await options.persistence.persist(state) : state;
-        return jsonResponse({ ok: true, user: publicUser(currentUser), state });
+        return jsonResponse({ ok: true, user: publicUser(currentUser), state: publicReviewState(state) });
       }
 
       if (result.mergeRequest) {
@@ -387,12 +388,12 @@ export function createReviewRequestHandler(
         };
         state = options.persistence ? await options.persistence.persist(state) : state;
         return jsonResponse(
-          { ok: false, error: result.error, mergeRequest: result.mergeRequest, state },
+          { ok: false, error: result.error, mergeRequest: result.mergeRequest, state: publicReviewState(state) },
           409
         );
       }
 
-      return jsonResponse({ ok: false, error: result.error, state }, 409);
+      return jsonResponse({ ok: false, error: result.error, state: publicReviewState(state) }, 409);
     }
 
     if (request.method === "POST" && /^\/auth\/merge-requests\/[^/]+\/approve$/.test(url.pathname)) {
@@ -414,7 +415,7 @@ export function createReviewRequestHandler(
       }
       const result = approveMergeRequest({ requestUser, targetUser, mergeRequest });
       if (!result.ok) {
-        return jsonResponse({ ok: false, error: result.error, state }, 409);
+        return jsonResponse({ ok: false, error: result.error, state: publicReviewState(state) }, 409);
       }
       const notifications = await createAccountMergeApprovedNotifications({
         mergeRequest,
@@ -429,7 +430,7 @@ export function createReviewRequestHandler(
         testCases: markPassed(state, "MVP1-AUTH-T012")
       };
       state = options.persistence ? await options.persistence.persist(state) : state;
-      return jsonResponse({ ok: true, state });
+      return jsonResponse({ ok: true, state: publicReviewState(state) });
     }
 
     if (request.method === "GET") {
@@ -562,6 +563,13 @@ function publicUser(user: AuthUser) {
       provider: identity.provider,
       providerUserId: identity.providerUserId
     }))
+  };
+}
+
+function publicReviewState(state: ReviewState) {
+  return {
+    ...state,
+    mergeRequestReviewItems: createMergeRequestReviewItems(state)
   };
 }
 
