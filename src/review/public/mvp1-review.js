@@ -262,7 +262,7 @@ function renderState(reviewState) {
   renderMessages(reviewState.messages ?? []);
   renderNotifications(notifications);
   renderAuditLogs(auditLogs);
-  renderAccounts(users, mergeRequests);
+  renderAccounts(users, mergeRequests, reviewState.mergeRequestReviewItems ?? []);
   renderTestCases(testCases);
 }
 
@@ -338,7 +338,7 @@ function renderNotifications(notifications) {
   }
 }
 
-function renderAccounts(users, mergeRequests) {
+function renderAccounts(users, mergeRequests, mergeRequestReviewItems) {
   clear(elements.accountList);
   for (const user of users) {
     const item = document.createElement("article");
@@ -358,18 +358,38 @@ function renderAccounts(users, mergeRequests) {
   }
 
   for (const mergeRequest of mergeRequests) {
+    const reviewItem = mergeRequestReviewItems.find(
+      (item) => item.mergeRequestUuid === mergeRequest.mergeRequestUuid
+    );
     const item = document.createElement("article");
     item.className = "account-item";
 
     const title = document.createElement("h3");
-    title.textContent = `병합 요청 ${mergeRequest.provider}`;
+    title.textContent = reviewItem
+      ? `통합 요청 ${reviewItem.providerLabel} / ${reviewItem.statusLabel}`
+      : `통합 요청 ${mergeRequest.provider}`;
 
     const details = document.createElement("dl");
-    appendDetail(details, "상태", mergeRequest.status);
-    appendDetail(details, "요청 계정", mergeRequest.requestUserUuid);
-    appendDetail(details, "대상 계정", mergeRequest.targetUserUuid);
-    appendDetail(details, "제공자 식별자", maskProviderUserId(mergeRequest.providerUserId));
+    appendDetail(details, "상태", reviewItem?.statusLabel ?? mergeRequest.status);
+    appendDetail(details, "요청 계정", reviewItem?.requestUserLabel ?? mergeRequest.requestUserUuid);
+    appendDetail(details, "대상 계정", reviewItem?.targetUserLabel ?? mergeRequest.targetUserUuid);
+    appendDetail(details, "이전 제공자", reviewItem?.providerLabel ?? mergeRequest.provider);
+    appendDetail(
+      details,
+      "제공자 식별자",
+      reviewItem?.maskedProviderUserId ?? maskProviderUserId(mergeRequest.providerUserId)
+    );
     appendDetail(details, "만료", new Date(mergeRequest.expiresAt).toLocaleString());
+    appendDetail(
+      details,
+      "승인 후",
+      reviewItem?.targetAfterApproval ?? "승인 후 대상 계정은 merged 상태가 됩니다."
+    );
+    appendDetail(
+      details,
+      "주의",
+      reviewItem?.irreversibleNotice ?? "통합 승인 후 되돌리기 어려운 작업입니다."
+    );
 
     item.append(title, details);
     elements.accountList?.append(item);
