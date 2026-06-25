@@ -1,8 +1,8 @@
-# Cloudtype stg/prd 운영 기준
+# Cloudtype stg/prd 운영 후보 기준
 
 ## 목적
 
-PDFowers MVP1 검수 서버를 Cloudtype에서 stg와 prd 환경으로 분리 운영하기 위한 설정 기준이다. 실제 비밀번호, OAuth Client Secret, DB URL 원문은 Cloudtype 환경변수 또는 시크릿에만 저장한다.
+PDFowers MVP1 검수 서버를 Cloudtype에서 stg와 prd 환경으로 분리 운영하기로 결정할 경우 적용할 설정 기준이다. 현재 운영 위치는 NAS와 Cloudtype 중 추후 결정하며, 결정 전까지 운영 도메인은 NAS prd 후보에 연결할 수 있다. 실제 비밀번호, OAuth Client Secret, DB URL 원문은 배포 환경의 환경변수 또는 시크릿에만 저장한다.
 
 ## 공통 설정
 
@@ -46,9 +46,9 @@ PDFowers MVP1 검수 서버를 Cloudtype에서 stg와 prd 환경으로 분리 �
 
 1. 작업 브랜치에서 `dev` 대상 PR을 생성한다.
 2. `dev` 병합 후 `dev -> stg` PR을 생성한다.
-3. stg Cloudtype 배포와 검수 결과를 PR 또는 이슈 댓글에 기록한다.
+3. stg 배포 위치가 Cloudtype이면 Cloudtype 배포와 검수 결과를 PR 또는 이슈 댓글에 기록한다.
 4. 검수 완료 후 `stg -> main` PR을 생성한다.
-5. prd Cloudtype 배포 후 최종 커밋 SHA와 검증 결과를 이슈 댓글에 기록한다.
+5. prd 배포 위치가 Cloudtype이면 Cloudtype 배포 후 최종 커밋 SHA와 검증 결과를 이슈 댓글에 기록한다.
 
 ## DB 마이그레이션
 
@@ -75,3 +75,5 @@ npm run review:kakao-smoke -- --base-url https://fowersstg.pdfrend.com
 ```
 
 이 검사는 `/auth/kakao/config-status`가 `enabled=true`인지, `/auth/kakao/start`가 `https://kauth.kakao.com/oauth/authorize`로 3xx redirect를 반환하는지만 확인한다. 실제 카카오 계정 인증 완료는 브라우저 수동 검증으로 진행한다.
+
+운영 도메인을 NAS prd 후보에 임시 연결하더라도 Kakao Redirect URI는 실제 운영 도메인 기준으로 등록한다. 나중에 Cloudtype으로 이전할 때 같은 운영 도메인을 유지하면 Kakao callback URI는 바꾸지 않는다.

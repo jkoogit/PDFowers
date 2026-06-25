@@ -42,11 +42,11 @@
 | 영역 | 상태 | 비고 |
 | :--- | :---: | :--- |
 | ID/PW 회원가입 및 로그인 | 구현 | 검수 서버 API와 도메인 테스트 기준 |
-| 이메일 인증 정책 | 부분 구현 | 인증 완료 상태와 미인증 로그인 차단 로직 구현, 실제 이메일 인증 링크 발송/완료 화면은 후속 |
+| 이메일 인증 정책 | 재정의 필요 | 기존 도메인에는 미인증 로그인 차단 로직이 있으나, 최신 결정은 로그인 허용 후 사용자정보 화면 인증 안내다. 실제 인증 발송/확인 API와 화면은 후속 |
 | Kakao OAuth | 구현 | 실제 OAuth start/callback, token/profile 조회, callback UX 반영 |
-| Naver/Google OAuth | 부분 구현 | 도메인/검수 API의 mock provider 흐름은 존재, 실제 provider 연동은 후속 |
+| Naver/Google OAuth | MVP1 구현 대상 | 도메인/검수 API의 mock provider 흐름은 존재, 실제 provider start/callback/profile normalize는 후속 |
 | 로그인 수단 연결/해제 | 구현 | provider identity 연결/해제, 기본 ID/PW 삭제 차단 |
-| 계정 통합 요청/승인/취소/만료 | 구현 | 도메인, 검수 API, 검수화면 상태 표시 |
+| 계정 통합 요청/승인/취소/만료 | 보완 필요 | 도메인, 검수 API, 검수화면 상태 표시는 존재. 사용자정보 화면 목록, 요청자/대상자 상태, 승인/거절/삭제 버튼은 후속 |
 | 알림 이벤트/SMTP | 부분 구현 | 계정 통합 요청/승인 알림 이벤트와 SMTP sender 구현, 실제 계정 수신 검증은 후속 |
 | PostgreSQL 저장소 | 구현 | Drizzle schema/migration, 통합 테스트 기준 |
 | MVP1 검수화면 | 구현 | 정적 HTML/JS/CSS와 Node HTTP 서버 |
@@ -57,3 +57,4 @@
 | 작업일시 | 작업 에이전트 | 작성자 | 내용 한 줄 요약 |
 | :--- | :--- | :--- | :--- |
 | 2026-06-17 KST | Codex | jkoogi | MVP1 구현 상태 기준 중간점검 산출물 폴더 작성 |
+| 2026-06-25 KST | Codex | jkoogi | 이메일 인증 정책과 네이버/구글 OAuth, 계정 통합 UX 보완 범위 현행화 |
