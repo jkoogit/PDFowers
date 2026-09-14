@@ -21,6 +21,9 @@ export class LocalDocsScanner implements DocsScannerPort {
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
+        if (["node_modules", ".git", "dist", ".agents", ".system_generated"].includes(entry.name)) {
+          continue;
+        }
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           await this.walkDir(fullPath, results);
