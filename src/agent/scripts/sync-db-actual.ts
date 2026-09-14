@@ -10,13 +10,24 @@ async function syncActualState() {
     await pool.query("DELETE FROM harness_loop_meta WHERE loop_id = 'LP-20260915-01'");
     console.log('✅ 임의 루프 레코드(LP-20260915-01) 삭제 완료');
 
-    // 2. 태스크 doc_payload의 loopList 정리
+    // 2. 태스크 doc_payload의 loopList 정리 및 상태 '정리' 전이
     const taskRes = await pool.query("SELECT doc_payload FROM harness_task_meta WHERE task_id = 'TSK-20260915-01'");
     if (taskRes.rows.length > 0) {
       const payload = taskRes.rows[0].doc_payload;
       payload.loopList = [];
-      await pool.query("UPDATE harness_task_meta SET doc_payload = $1 WHERE task_id = 'TSK-20260915-01'", [JSON.stringify(payload)]);
-      console.log('✅ 태스크(TSK-20260915-01) 루프 목록 빈 배열 현행화 완료');
+      payload.status = '정리';
+      payload.endedAt = new Date().toISOString();
+      payload.gitInfo.endCommit = 'd9434d3';
+      payload.gitInfo.pr = {
+        prNumber: 78,
+        title: '에이전트 서비스 DDD/헥사고날 구현, 문서DB 스키마 및 테스트 패키지 체계화 (#76)',
+        url: 'https://github.com/jkoogit/PDFowers/pull/78'
+      };
+      await pool.query(
+        "UPDATE harness_task_meta SET status_cd = '정리', ended_at = NOW(), doc_payload = $1, version = version + 1 WHERE task_id = 'TSK-20260915-01'",
+        [JSON.stringify(payload)]
+      );
+      console.log('✅ 태스크(TSK-20260915-01) 상태 [정리] 전이 및 PR #78 정보 등록 완료');
     }
 
     // 3. 현재 DB 테이블 카운트 확인
